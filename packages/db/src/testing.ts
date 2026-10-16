@@ -8,14 +8,14 @@ export interface TestDatabase {
 }
 
 export interface CreateTestDatabaseOptions {
-  /** false — оставить базу пустой, без миграций. */
+  /** false: leave the database empty, without migrations. */
   migrate?: boolean;
 }
 
 /**
- * Создаёт отдельную временную базу с применёнными миграциями.
- * adminUrl — строка подключения к серверу с правом CREATE DATABASE
- * (локально: docker compose, в CI: сервис postgis).
+ * Creates a separate throwaway database with migrations applied.
+ * adminUrl: connection string to a server with CREATE DATABASE privilege
+ * (locally: docker compose; in CI: the postgis service).
  */
 export async function createTestDatabase(
   adminUrl: string,

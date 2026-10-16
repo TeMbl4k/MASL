@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 
-/* Палитра из референса дизайна (Снимок экрана 2026-10-16 152751.png). */
+/* Palette from the design reference (Снимок экрана 2026-10-16 152751.png). */
 @theme {
   --color-brand: #e85002;
   --color-brand-deep: #c10801;
@@ -22,7 +22,7 @@
   }
 }
 
-/* Фирменный градиент: чёрный → красный → оранжевый → песочный. */
+/* Brand gradient: black → red → orange → sand. */
 .bg-brand-glow {
   background:
     radial-gradient(120% 80% at 50% 0%, rgb(241 96 1 / 0.55) 0%, rgb(193 8 1 / 0.35) 35%, transparent 70%),

@@ -6,11 +6,11 @@ import { onboardingInput } from './schemas.js';
 describe('onboardingInput', () => {
   const valid = { gender: 'female', age: 24, interests: ['sport', 'bars', 'networking'] };
 
-  it('принимает корректный онбординг', () => {
+  it('accepts valid onboarding input', () => {
     expect(onboardingInput.parse(valid)).toEqual(valid);
   });
 
-  it('требует от 3 до 5 интересов без повторов', () => {
+  it('requires 3 to 5 unique interests', () => {
     expect(onboardingInput.safeParse({ ...valid, interests: ['sport', 'bars'] }).success).toBe(false);
     expect(onboardingInput.safeParse({ ...valid, interests: INTEREST_SLUGS.slice(0, 6) }).success).toBe(
       false,
@@ -20,7 +20,7 @@ describe('onboardingInput', () => {
     );
   });
 
-  it('отклоняет неизвестный интерес, возраст вне 18–99 и дробный возраст', () => {
+  it('rejects an unknown interest, age outside 18–99 and a fractional age', () => {
     expect(onboardingInput.safeParse({ ...valid, interests: ['sport', 'bars', 'nope'] }).success).toBe(false);
     expect(onboardingInput.safeParse({ ...valid, age: 17 }).success).toBe(false);
     expect(onboardingInput.safeParse({ ...valid, age: 100 }).success).toBe(false);
@@ -28,14 +28,14 @@ describe('onboardingInput', () => {
   });
 });
 
-describe('справочники', () => {
-  it('каждый интерес — это категория лобби (для ленты «Для вас»)', () => {
+describe('reference data', () => {
+  it('every interest is a lobby category (for the "For you" feed)', () => {
     for (const interest of INTERESTS) {
       expect(LOBBY_CATEGORIES).toContain(interest.slug);
     }
   });
 
-  it('slug интересов уникальны', () => {
+  it('interest slugs are unique', () => {
     expect(new Set(INTEREST_SLUGS).size).toBe(INTEREST_SLUGS.length);
   });
 });

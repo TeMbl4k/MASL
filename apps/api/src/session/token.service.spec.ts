@@ -7,24 +7,24 @@ const service = new TokenService(env);
 const USER_ID = '6f1c2f4e-2b7a-4c55-9a1e-0a4b2a9b8c11';
 
 describe('TokenService', () => {
-  it('выдаёт токен и узнаёт по нему пользователя', async () => {
+  it('issues a token and resolves the user from it', async () => {
     const { token, expiresAt } = await service.issue(USER_ID);
     expect(await service.verify(token)).toBe(USER_ID);
     expect(expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
-  it('не принимает истёкший токен', async () => {
+  it('rejects an expired token', async () => {
     const { token } = await service.issue(USER_ID, new Date(Date.now() - 2 * 3600_000));
     expect(await service.verify(token)).toBeNull();
   });
 
-  it('не принимает токен, подписанный другим секретом', async () => {
+  it('rejects a token signed with another secret', async () => {
     const other = new TokenService({ ...env, JWT_SECRET: 'y'.repeat(40) });
     const { token } = await other.issue(USER_ID);
     expect(await service.verify(token)).toBeNull();
   });
 
-  it('не принимает токен без нашего issuer/audience', async () => {
+  it('rejects a token without our issuer/audience', async () => {
     const key = new TextEncoder().encode(env.JWT_SECRET);
     const foreign = await new SignJWT({})
       .setProtectedHeader({ alg: 'HS256' })
@@ -34,7 +34,7 @@ describe('TokenService', () => {
     expect(await service.verify(foreign)).toBeNull();
   });
 
-  it('не принимает мусор', async () => {
+  it('rejects garbage', async () => {
     expect(await service.verify('abc.def.ghi')).toBeNull();
   });
 });

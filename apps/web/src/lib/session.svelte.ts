@@ -15,13 +15,13 @@ function errorMessage(error: unknown): string {
       : 'Сервер недоступен. Попробуйте ещё раз чуть позже.';
   }
   if (error instanceof TypeError) {
-    // fetch бросает TypeError, когда сети или сервера нет.
+    // fetch throws TypeError when the network or server is unreachable.
     return 'Сервер недоступен. Попробуйте ещё раз чуть позже.';
   }
   return 'Не получилось запустить приложение. Откройте его заново.';
 }
 
-/** Состояние сессии Mini App: вход по initData, текущий пользователь и справочник интересов. */
+/** Mini App session state: initData login, current user and the interests list. */
 class Session {
   state = $state<SessionState>({ status: 'loading' });
   interests = $state<InterestDto[]>([]);
@@ -31,7 +31,7 @@ class Session {
   async start(): Promise<void> {
     this.state = { status: 'loading' };
     try {
-      // SDK инициализируем один раз; «Повторить» только заново ходит в API.
+      // Init the SDK once; the Retry button only calls the API again.
       this.#telegram ??= initTelegram();
       const { rawInitData } = this.#telegram;
       if (!rawInitData) {
@@ -57,8 +57,8 @@ class Session {
   }
 
   /**
-   * Запрос с токеном сессии. Если сессия истекла (401), один раз входит заново
-   * по той же initData и повторяет запрос; если и это не вышло, показывает ошибку.
+   * Calls the API with the session token. On 401 (expired session) logs in once more
+   * with the same initData and retries the call; if that fails too, shows an error.
    */
   async #withToken<T>(call: (token: string) => Promise<T>): Promise<T> {
     if (this.state.status !== 'ready') {

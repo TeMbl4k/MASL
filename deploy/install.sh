@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Первый запуск MASL на чистом сервере Ubuntu 22.04/24.04. Повторный запуск безопасен.
+# First-time setup of MASL on a fresh Ubuntu 22.04/24.04 server. Safe to re-run.
 #   git clone https://github.com/TeMbl4k/MASL.git masl && cd masl && sudo bash deploy/install.sh
 set -euo pipefail
 
@@ -16,7 +16,7 @@ echo "== Docker"
 packages=()
 command -v curl >/dev/null || packages+=(curl)
 command -v openssl >/dev/null || packages+=(openssl)
-# Пакеты из репозитория Ubuntu: download.docker.com из России доступен не всегда.
+# Use Ubuntu's own packages: download.docker.com is not always reachable from Russia.
 docker compose version >/dev/null 2>&1 || packages+=(docker.io docker-compose-v2)
 if [ "${#packages[@]}" -gt 0 ]; then
   apt-get update -q
@@ -24,7 +24,7 @@ if [ "${#packages[@]}" -gt 0 ]; then
 fi
 systemctl enable --now docker
 
-# Docker Hub из России иногда недоступен: тогда качаем образы через зеркала.
+# Docker Hub is sometimes unreachable from Russia; pull images through mirrors then.
 hub_status="$(curl -s -o /dev/null -m 10 -w '%{http_code}' https://registry-1.docker.io/v2/ || true)"
 if [ "$hub_status" != "401" ] && [ ! -f /etc/docker/daemon.json ]; then
   echo "Docker Hub недоступен, подключаю зеркала"
@@ -35,7 +35,7 @@ JSON
 fi
 
 echo "== Память для сборки"
-# Сборке нужно около 2 ГБ памяти; на маленьком сервере добавляем swap.
+# The build needs about 2 GB of RAM; add swap on small servers.
 mem_mb="$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)"
 if [ "$mem_mb" -lt 3000 ] && [ -z "$(swapon --noheadings)" ]; then
   fallocate -l 2G /swapfile
@@ -48,7 +48,7 @@ fi
 
 echo "== Настройки"
 if [ ! -f "$ENV_FILE" ]; then
-  # Публичный IP сервера: sslip.io превращает его в домен, на который выдают сертификат.
+  # Server's public IP: sslip.io turns it into a domain that can get a certificate.
   ip="$(curl -4 -fsS -m 5 https://ifconfig.me 2>/dev/null || true)"
   if ! [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')"

@@ -10,7 +10,7 @@ export interface IssuedToken {
   expiresAt: Date;
 }
 
-/** Короткие сессионные JWT (HS256), которые Mini App получает после проверки initData. */
+/** Short-lived session JWTs (HS256) the Mini App gets after initData verification. */
 @Injectable()
 export class TokenService {
   private readonly key: Uint8Array;
@@ -33,7 +33,7 @@ export class TokenService {
     return { token, expiresAt: new Date(expiresAtSeconds * 1000) };
   }
 
-  /** Возвращает id пользователя или null, если токен недействителен. */
+  /** Returns the user id, or null if the token is invalid. */
   async verify(token: string): Promise<string | null> {
     try {
       const { payload } = await jwtVerify(token, this.key, {

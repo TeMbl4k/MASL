@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Обновить MASL на сервере до свежего кода из GitHub: sudo bash deploy/update.sh
+# Update MASL on the server to the latest code from GitHub: sudo bash deploy/update.sh
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "$0")" && pwd)"

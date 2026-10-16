@@ -4,8 +4,8 @@ import type { Database } from './client.js';
 import { interests } from './schema.js';
 
 /**
- * Приводит справочник интересов к списку из @masl/shared: добавляет и обновляет
- * текущие, удаляет исчезнувшие (выбор пользователей удаляется каскадом).
+ * Syncs the interests table with the list in @masl/shared: upserts current entries
+ * and deletes removed ones (user selections are removed by cascade).
  */
 export async function seedInterests(db: Database): Promise<void> {
   await db.transaction(async (tx) => {

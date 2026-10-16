@@ -1,5 +1,5 @@
-# Запуск на своём сервере: база PostGIS, приложение и Caddy с HTTPS.
-# Обычно запускается через deploy/install.sh, переменные лежат в deploy/.env.
+# Self-hosted setup: PostGIS database, the app, and Caddy with HTTPS.
+# Usually started via deploy/install.sh; variables live in deploy/.env.
 name: masl
 
 services:

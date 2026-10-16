@@ -1,13 +1,13 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
-/** Заглушки из .env.example содержат слово replace: с ними API не стартует. */
+/** Placeholders in .env.example contain the word "replace"; the API refuses to start with them. */
 const isPlaceholder = (value: string) => /replace/i.test(value);
 
 /**
- * Origin вида https://masl.example — ровно то, что браузер присылает в заголовке
- * Origin. CORS сравнивает строки точно, поэтому приводим к url.origin (нижний
- * регистр, без слэша на конце) и отклоняем адреса с путём.
+ * An origin like https://masl.example, exactly what the browser sends in the
+ * Origin header. CORS compares strings exactly, so normalize to url.origin
+ * (lowercase, no trailing slash) and reject URLs with a path.
  */
 const webOrigin = z.string().transform((value, ctx) => {
   let url: URL;
@@ -75,11 +75,11 @@ export const envSchema = z
       .positive()
       .default(24 * 60 * 60),
     /**
-     * Другие домены, с которых можно ходить в API (CORS). Обычно не нужен:
-     * Mini App и API работают на одном домене, а в разработке Vite проксирует /api.
+     * Other origins allowed to call the API (CORS). Usually not needed:
+     * the Mini App and the API share one origin, and in development Vite proxies /api.
      */
     WEB_ORIGINS: webOrigins,
-    /** Каталог сборки Mini App, если она лежит не в apps/web/build. */
+    /** Mini App build directory, if it is not apps/web/build. */
     WEB_DIST_DIR: z.preprocess(
       (value) => (value === '' ? undefined : value),
       z

@@ -8,8 +8,8 @@ if (!url) {
 }
 
 /**
- * Ошибки, когда база ещё поднимается или её адрес ещё не резолвится (первый деплой).
- * Drizzle заворачивает ошибку драйвера в DrizzleQueryError, код лежит в cause.
+ * Errors while the database is still starting or its host doesn't resolve yet (first deploy).
+ * Drizzle wraps the driver error in DrizzleQueryError; the code is in `cause`.
  */
 const TRANSIENT_CODES = new Set([
   'ECONNREFUSED',

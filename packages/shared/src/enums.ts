@@ -1,10 +1,10 @@
-/** Пол пользователя (онбординг). */
+/** User gender (onboarding). */
 export const GENDERS = ['male', 'female'] as const;
 export type Gender = (typeof GENDERS)[number];
 
 /**
- * Категории лобби. Совпадают со slug интересов, чтобы лента «Для вас»
- * могла сравнивать категорию лобби с интересами пользователя.
+ * Lobby categories. They match interest slugs so the "For you" feed
+ * can compare a lobby's category with the user's interests.
  */
 export const LOBBY_CATEGORIES = [
   'sport',
@@ -22,18 +22,18 @@ export const LOBBY_CATEGORIES = [
 export type LobbyCategory = (typeof LOBBY_CATEGORIES)[number];
 
 /**
- * Статусы лобби (state machine):
- * open (сбор) → active (идёт) → finished; из open/active → cancelled.
+ * Lobby statuses (state machine):
+ * open (gathering) → active (in progress) → finished; open/active → cancelled.
  */
 export const LOBBY_STATUSES = ['open', 'active', 'finished', 'cancelled'] as const;
 export type LobbyStatus = (typeof LOBBY_STATUSES)[number];
 
-/** Финансовый формат встречи. */
+/** How a meetup is paid for. */
 export const PAYMENT_FORMATS = ['free', 'split'] as const;
 export type PaymentFormat = (typeof PAYMENT_FORMATS)[number];
 
 /**
- * Статус заявки участника в лобби.
+ * Status of a participant's request to join a lobby.
  * pending → approved | rejected; approved → cancelled | attended | no_show.
  */
 export const MEMBERSHIP_STATUSES = [
@@ -46,6 +46,6 @@ export const MEMBERSHIP_STATUSES = [
 ] as const;
 export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 
-/** Причины изменения кармы (журнал karma_events). */
+/** Karma change reasons (karma_events log). */
 export const KARMA_REASONS = ['attended', 'late_cancel', 'no_show', 'host_late_cancel', 'manual'] as const;
 export type KarmaReason = (typeof KARMA_REASONS)[number];

@@ -13,7 +13,7 @@ interface AuthenticatedRequest extends FastifyRequest {
   userId?: string;
 }
 
-/** Пропускает запрос только с действующим Bearer-токеном сессии. */
+/** Lets a request through only with a valid session Bearer token. */
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(@Inject(TokenService) private readonly tokens: TokenService) {}
@@ -34,7 +34,7 @@ export class AuthGuard implements CanActivate {
   }
 }
 
-/** id текущего пользователя; использовать только вместе с AuthGuard. */
+/** Current user id; use only together with AuthGuard. */
 export const CurrentUserId = createParamDecorator((_data: unknown, context: ExecutionContext): string => {
   const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
   if (!request.userId) {
