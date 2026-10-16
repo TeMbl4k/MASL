@@ -1,12 +1,11 @@
 import type { AuthResponse, InterestDto, MeDto, OnboardingInput } from '@masl/shared';
 
 /**
- * Адрес API. В разработке по умолчанию `/api`: Vite проксирует его на localhost:3000,
- * так что один туннель отдаёт и Mini App, и API. В сборке для деплоя VITE_API_URL обязателен.
+ * Адрес API. По умолчанию `/api` на том же домене: в продакшене API сам отдаёт
+ * Mini App, в разработке Vite проксирует /api на localhost:3000. VITE_API_URL
+ * нужен, только если API живёт на другом домене.
  */
-const API_URL = (
-  (import.meta.env.VITE_API_URL as string | undefined) || (import.meta.env.DEV ? '/api' : '')
-).replace(/\/$/, '');
+const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) || '/api').replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(
@@ -18,9 +17,6 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
-  if (!API_URL) {
-    throw new Error('VITE_API_URL не задан при сборке');
-  }
   const headers = new Headers(init.headers);
   if (init.body !== undefined) {
     headers.set('Content-Type', 'application/json');

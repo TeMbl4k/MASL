@@ -43,7 +43,7 @@ Mini App должна открываться по HTTPS. Поднимите ту
 
 ### Деплой
 
-Для сборки Mini App обязателен `VITE_API_URL` (адрес API). API в production (`NODE_ENV=production`) требует `WEB_ORIGINS`: адрес, с которого открывается Mini App, без пути.
+`Dockerfile` в корне собирает один образ: API отдаёт и Mini App, и `/api`, а перед стартом применяет миграции. Нужна PostgreSQL с PostGIS и переменные `DATABASE_URL`, `BOT_TOKEN`, `JWT_SECRET`, `NODE_ENV=production`. Пошагово для Railway: [docs/deploy-railway.md](docs/deploy-railway.md).
 
 ## Проверки
 
@@ -66,10 +66,12 @@ drizzle-kit берёт пользовательский тип в кавычки
 
 ## API
 
-| Метод | Путь             | Что делает                                                    |
-| ----- | ---------------- | ------------------------------------------------------------- |
-| POST  | `/auth/telegram` | `{ initData }` → проверка подписи, создание пользователя, JWT |
-| GET   | `/me`            | Профиль текущего пользователя (Bearer)                        |
-| PUT   | `/me/onboarding` | Пол, возраст, 3–5 интересов (Bearer)                          |
-| GET   | `/interests`     | Облако интересов                                              |
-| GET   | `/health`        | Проверка API и базы                                           |
+Все маршруты API живут под `/api`, остальное отдаёт Mini App (один домен, без CORS).
+
+| Метод | Путь                 | Что делает                                                    |
+| ----- | -------------------- | ------------------------------------------------------------- |
+| POST  | `/api/auth/telegram` | `{ initData }` → проверка подписи, создание пользователя, JWT |
+| GET   | `/api/me`            | Профиль текущего пользователя (Bearer)                        |
+| PUT   | `/api/me/onboarding` | Пол, возраст, 3–5 интересов (Bearer)                          |
+| GET   | `/api/interests`     | Облако интересов                                              |
+| GET   | `/api/health`        | Проверка API и базы                                           |

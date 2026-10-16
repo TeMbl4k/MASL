@@ -13,6 +13,7 @@
     "dev:init-data": "node --env-file-if-exists=.env scripts/dev-init-data.mjs"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.6",
     "@masl/db": "workspace:*",
     "@masl/shared": "workspace:*",
     "@nestjs/common": "^12.1.3",

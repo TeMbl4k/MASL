@@ -1,24 +1,40 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
 import type { Env } from './config/env.js';
+import { API_PREFIX, serveSpa } from './spa.js';
+
+export interface CreateAppOptions {
+  logger?: boolean;
+  /**
+   * Каталог сборки Mini App (apps/web/build). Если в нём есть index.html,
+   * API отдаёт Mini App с того же домена; иначе работает только API (разработка).
+   */
+  webDistDir?: string;
+}
 
 /** Собирает приложение; используется и в main.ts, и в e2e-тестах. */
-export async function createApp(
-  env: Env,
-  options: { logger?: boolean } = {},
-): Promise<NestFastifyApplication> {
+export async function createApp(env: Env, options: CreateAppOptions = {}): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot(env),
     // Railway и другие хостинги стоят за прокси.
     new FastifyAdapter({ trustProxy: true }),
     { logger: options.logger === false ? false : undefined },
   );
-  app.enableCors({
-    origin: env.WEB_ORIGINS,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Authorization', 'Content-Type'],
-  });
+  app.setGlobalPrefix(API_PREFIX);
+  // CORS нужен, только если Mini App открывается с другого домена.
+  if (env.WEB_ORIGINS.length > 0) {
+    app.enableCors({
+      origin: env.WEB_ORIGINS,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+      allowedHeaders: ['Authorization', 'Content-Type'],
+    });
+  }
+  if (options.webDistDir && existsSync(join(options.webDistDir, 'index.html'))) {
+    serveSpa(app, options.webDistDir);
+  }
   app.enableShutdownHooks();
   return app;
 }

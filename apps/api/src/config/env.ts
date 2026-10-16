@@ -1,8 +1,5 @@
 import { z } from 'zod';
 
-/** Разрешённый origin для разработки, если WEB_ORIGINS не задан. */
-const DEV_WEB_ORIGINS = ['http://localhost:5173'];
-
 /** Заглушки из .env.example содержат слово replace: с ними API не стартует. */
 const isPlaceholder = (value: string) => /replace/i.test(value);
 
@@ -76,18 +73,15 @@ export const envSchema = z
       .int()
       .positive()
       .default(24 * 60 * 60),
+    /**
+     * Другие домены, с которых можно ходить в API (CORS). Обычно не нужен:
+     * Mini App и API работают на одном домене, а в разработке Vite проксирует /api.
+     */
     WEB_ORIGINS: webOrigins,
+    /** Каталог сборки Mini App, если она лежит не в apps/web/build. */
+    WEB_DIST_DIR: z.string().min(1).optional(),
   })
-  .superRefine((env, ctx) => {
-    if (env.NODE_ENV === 'production' && !env.WEB_ORIGINS) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['WEB_ORIGINS'],
-        message: 'в production обязателен: адрес, с которого открывается Mini App',
-      });
-    }
-  })
-  .transform(({ WEB_ORIGINS, ...env }) => ({ ...env, WEB_ORIGINS: WEB_ORIGINS ?? DEV_WEB_ORIGINS }));
+  .transform(({ WEB_ORIGINS, ...env }) => ({ ...env, WEB_ORIGINS: WEB_ORIGINS ?? [] }));
 
 export type Env = z.infer<typeof envSchema>;
 

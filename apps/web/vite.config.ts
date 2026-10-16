@@ -18,10 +18,8 @@ export default defineConfig({
   server: {
     // Туннель для проверки в Telegram: cloudflared tunnel --url http://localhost:5173
     allowedHosts: ['.trycloudflare.com'],
-    // API через тот же origin: один туннель на всё и без CORS в разработке.
-    proxy: {
-      '/api': { target: 'http://localhost:3000', rewrite: (path) => path.replace(/^\/api/, '') },
-    },
+    // API на том же домене, как в продакшене: один туннель на всё и без CORS.
+    proxy: { '/api': 'http://localhost:3000' },
   },
   test: {
     expect: { requireAssertions: true },
