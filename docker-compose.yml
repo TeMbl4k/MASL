@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.5-alpine
+    environment:
+      POSTGRES_USER: masl
+      POSTGRES_PASSWORD: masl
+      POSTGRES_DB: masl
+    ports:
+      # Только с этой машины: пароль masl/masl годится лишь для локальной разработки.
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U masl -d masl']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '127.0.0.1:6379:6379'
+
+volumes:
+  pgdata:
