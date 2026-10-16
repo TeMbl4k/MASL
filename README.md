@@ -43,7 +43,7 @@ Mini App должна открываться по HTTPS. Поднимите ту
 
 ### Деплой
 
-`Dockerfile` в корне собирает один образ: API отдаёт и Mini App, и `/api`, а перед стартом применяет миграции. Нужна PostgreSQL с PostGIS и переменные `DATABASE_URL`, `BOT_TOKEN`, `JWT_SECRET`, `NODE_ENV=production`. Пошагово бесплатно на Render + Neon: [docs/deploy-render.md](docs/deploy-render.md); на Railway (платно): [docs/deploy-railway.md](docs/deploy-railway.md).
+`Dockerfile` в корне собирает один образ: API отдаёт и Mini App, и `/api`, а перед стартом применяет миграции. Нужна PostgreSQL с PostGIS и переменные `DATABASE_URL`, `BOT_TOKEN`, `JWT_SECRET`, `NODE_ENV=production`. Пошагово на своём сервере (база, приложение и HTTPS одной командой): [docs/deploy-vps.md](docs/deploy-vps.md). Другие варианты: бесплатно на Render + Neon ([docs/deploy-render.md](docs/deploy-render.md)) и на Railway ([docs/deploy-railway.md](docs/deploy-railway.md)).
 
 ## Проверки
 
