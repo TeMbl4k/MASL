@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { z } from 'zod';
 
 /** Заглушки из .env.example содержат слово replace: с ними API не стартует. */
@@ -79,7 +80,13 @@ export const envSchema = z
      */
     WEB_ORIGINS: webOrigins,
     /** Каталог сборки Mini App, если она лежит не в apps/web/build. */
-    WEB_DIST_DIR: z.string().min(1).optional(),
+    WEB_DIST_DIR: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z
+        .string()
+        .transform((value) => resolve(value))
+        .optional(),
+    ),
   })
   .transform(({ WEB_ORIGINS, ...env }) => ({ ...env, WEB_ORIGINS: WEB_ORIGINS ?? [] }));
 

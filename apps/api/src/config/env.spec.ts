@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { loadEnv } from './env.js';
 
 const base = {
@@ -28,5 +29,10 @@ describe('loadEnv', () => {
     expect(() =>
       loadEnv({ ...base, JWT_SECRET: 'replace-with-a-long-random-string-at-least-32-chars' }),
     ).toThrow(/JWT_SECRET/);
+  });
+
+  it('WEB_DIST_DIR: пустое значение не задаёт каталог, относительный путь становится абсолютным', () => {
+    expect(loadEnv({ ...base, WEB_DIST_DIR: '' }).WEB_DIST_DIR).toBeUndefined();
+    expect(loadEnv({ ...base, WEB_DIST_DIR: 'web/build' }).WEB_DIST_DIR).toBe(resolve('web/build'));
   });
 });

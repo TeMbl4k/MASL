@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
@@ -10,7 +11,8 @@ export interface CreateAppOptions {
   logger?: boolean;
   /**
    * Каталог сборки Mini App (apps/web/build). Если в нём есть index.html,
-   * API отдаёт Mini App с того же домена; иначе работает только API (разработка).
+   * API отдаёт Mini App с того же домена; иначе пишет предупреждение и работает
+   * только API (так в разработке, где Mini App отдаёт Vite).
    */
   webDistDir?: string;
 }
@@ -32,8 +34,14 @@ export async function createApp(env: Env, options: CreateAppOptions = {}): Promi
       allowedHeaders: ['Authorization', 'Content-Type'],
     });
   }
-  if (options.webDistDir && existsSync(join(options.webDistDir, 'index.html'))) {
-    serveSpa(app, options.webDistDir);
+  if (options.webDistDir) {
+    if (existsSync(join(options.webDistDir, 'index.html'))) {
+      serveSpa(app, options.webDistDir);
+    } else {
+      new Logger('MiniApp').warn(
+        `Сборка Mini App не найдена в ${options.webDistDir}, отдаю только API. Соберите её: pnpm --filter @masl/web build`,
+      );
+    }
   }
   app.enableShutdownHooks();
   return app;

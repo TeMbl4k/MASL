@@ -7,12 +7,20 @@ export interface TestDatabase {
   drop: () => Promise<void>;
 }
 
+export interface CreateTestDatabaseOptions {
+  /** false — оставить базу пустой, без миграций. */
+  migrate?: boolean;
+}
+
 /**
  * Создаёт отдельную временную базу с применёнными миграциями.
  * adminUrl — строка подключения к серверу с правом CREATE DATABASE
  * (локально: docker compose, в CI: сервис postgis).
  */
-export async function createTestDatabase(adminUrl: string): Promise<TestDatabase> {
+export async function createTestDatabase(
+  adminUrl: string,
+  options: CreateTestDatabaseOptions = {},
+): Promise<TestDatabase> {
   const name = `masl_test_${randomBytes(6).toString('hex')}`;
   await runAsAdmin(adminUrl, `CREATE DATABASE ${name}`);
   const drop = () => runAsAdmin(adminUrl, `DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
@@ -20,7 +28,9 @@ export async function createTestDatabase(adminUrl: string): Promise<TestDatabase
   const url = new URL(adminUrl);
   url.pathname = `/${name}`;
   try {
-    await runMigrations(url.toString());
+    if (options.migrate !== false) {
+      await runMigrations(url.toString());
+    }
   } catch (error) {
     await drop();
     throw error;
