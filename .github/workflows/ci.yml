@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgis/postgis:16-3.5-alpine
+        env:
+          POSTGRES_USER: masl
+          POSTGRES_PASSWORD: masl
+          POSTGRES_DB: masl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U masl -d masl"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://masl:masl@localhost:5432/masl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+
+  docker:
+    # Тот же образ, что собирает Railway: сборка и запуск на чистой базе PostGIS.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t masl .
+      - name: Smoke test
+        run: |
+          docker network create masl
+          docker run -d --name db --network masl \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=smoke -e POSTGRES_DB=railway \
+            postgis/postgis:16-3.5-alpine
+          docker run -d --name app --network masl -p 3000:3000 \
+            -e PORT=3000 -e NODE_ENV=production \
+            -e DATABASE_URL=postgresql://postgres:smoke@db:5432/railway \
+            -e BOT_TOKEN=123456789:AAE-smoke-token_for-masl \
+            -e JWT_SECRET=smoke-secret-smoke-secret-smoke-secret \
+            masl
+          for i in $(seq 1 90); do curl -fsS localhost:3000/api/health && break; sleep 1; done
+          curl -fsS localhost:3000/api/health
+          curl -fsS localhost:3000/ | grep -q '</html>'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:3000/api/nope)" = 404
+      - if: failure()
+        run: docker logs app || true

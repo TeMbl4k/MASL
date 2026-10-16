@@ -1,0 +1,145 @@
+<script lang="ts">
+  import {
+    AGE_MAX,
+    AGE_MIN,
+    INTERESTS_MAX,
+    INTERESTS_MIN,
+    onboardingInput,
+    type Gender,
+    type InterestDto,
+    type MeDto,
+    type OnboardingInput,
+  } from '@masl/shared';
+
+  interface Props {
+    user: MeDto;
+    interests: InterestDto[];
+    onSubmit: (input: OnboardingInput) => Promise<void>;
+  }
+
+  let { user, interests, onSubmit }: Props = $props();
+
+  let gender = $state<Gender | null>(null);
+  let age = $state(25);
+  let selected = $state<string[]>([]);
+  let submitting = $state(false);
+  /** Нажимали «Начать поиск» с неполной формой: показываем, чего не хватает, пока не заполнят. */
+  let triedIncomplete = $state(false);
+  let error = $state<string | null>(null);
+
+  const ages = Array.from({ length: AGE_MAX - AGE_MIN + 1 }, (_, i) => AGE_MIN + i);
+  const isComplete = $derived(
+    gender !== null && selected.length >= INTERESTS_MIN && selected.length <= INTERESTS_MAX,
+  );
+
+  function toggle(slug: string) {
+    if (selected.includes(slug)) {
+      selected = selected.filter((s) => s !== slug);
+    } else if (selected.length < INTERESTS_MAX) {
+      selected = [...selected, slug];
+    }
+  }
+
+  async function submit() {
+    const parsed = onboardingInput.safeParse({ gender, age, interests: selected });
+    if (!parsed.success) {
+      triedIncomplete = true;
+      return;
+    }
+    submitting = true;
+    error = null;
+    try {
+      await onSubmit(parsed.data);
+    } catch {
+      error = 'Не получилось сохранить. Попробуйте ещё раз.';
+    } finally {
+      submitting = false;
+    }
+  }
+</script>
+
+<section class="bg-brand-glow flex min-h-dvh flex-col gap-8 px-5 pt-14 pb-28">
+  <header class="space-y-2">
+    <h1 class="text-4xl font-light tracking-tight">
+      Привет, <span class="font-semibold italic">{user.firstName}</span>!
+    </h1>
+    <p class="text-gray-light">Пара вопросов, чтобы показать встречи, которые вам подходят.</p>
+  </header>
+
+  <div class="space-y-3">
+    <h2 class="text-sm tracking-widest text-gray-light uppercase">Пол</h2>
+    <div class="grid grid-cols-2 gap-3">
+      {#each [{ value: 'male', label: 'Мужской' }, { value: 'female', label: 'Женский' }] as option (option.value)}
+        <button
+          type="button"
+          class="rounded-2xl border px-4 py-3 text-left transition {gender === option.value
+            ? 'border-brand bg-brand/15'
+            : 'border-gray-dark bg-gray-dark/40'}"
+          aria-pressed={gender === option.value}
+          onclick={() => (gender = option.value as Gender)}
+        >
+          {option.label}
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  <div class="space-y-3">
+    <label for="age" class="text-sm tracking-widest text-gray-light uppercase">Возраст</label>
+    <select
+      id="age"
+      bind:value={age}
+      class="w-full appearance-none rounded-2xl border border-gray-dark bg-gray-dark/40 px-4 py-3 text-lg"
+    >
+      {#each ages as value (value)}
+        <option {value}>{value}</option>
+      {/each}
+    </select>
+  </div>
+
+  <div class="space-y-3">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-sm tracking-widest text-gray-light uppercase">Интересы</h2>
+      <span class="text-sm text-gray-light">{selected.length} из {INTERESTS_MIN}–{INTERESTS_MAX}</span>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      {#each interests as interest (interest.slug)}
+        {@const active = selected.includes(interest.slug)}
+        <button
+          type="button"
+          class="rounded-full border px-4 py-2 text-sm transition {active
+            ? 'border-brand bg-brand/20 text-paper'
+            : 'border-gray-dark bg-gray-dark/40 text-paper/90'}"
+          aria-pressed={active}
+          disabled={!active && selected.length >= INTERESTS_MAX}
+          onclick={() => toggle(interest.slug)}
+        >
+          {interest.emoji}
+          {interest.title}
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  {#if triedIncomplete && !isComplete}
+    <p class="text-brand-light" role="alert">
+      Выберите пол и от {INTERESTS_MIN} до {INTERESTS_MAX} интересов
+    </p>
+  {:else if error}
+    <p class="text-brand-light" role="alert">{error}</p>
+  {/if}
+
+  <div class="fixed inset-x-0 bottom-0 bg-gradient-to-t from-ink via-ink/90 to-transparent px-5 pt-6 pb-8">
+    <!-- Кнопка активна и при неполной форме: по нажатию объясняем, чего не хватает. -->
+    <button
+      type="button"
+      class="w-full rounded-2xl py-4 text-xl font-bold transition {isComplete
+        ? 'bg-brand text-paper'
+        : 'bg-gray-dark text-gray-light'}"
+      disabled={submitting}
+      onclick={submit}
+    >
+      {submitting ? 'Сохраняем…' : 'Начать поиск'}
+    </button>
+  </div>
+</section>

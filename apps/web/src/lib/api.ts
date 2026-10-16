@@ -1,0 +1,50 @@
+import type { AuthResponse, InterestDto, MeDto, OnboardingInput } from '@masl/shared';
+
+/**
+ * Адрес API. По умолчанию `/api` на том же домене: в продакшене API сам отдаёт
+ * Mini App, в разработке Vite проксирует /api на localhost:3000. VITE_API_URL
+ * нужен, только если API живёт на другом домене.
+ */
+const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) || '/api').replace(/\/$/, '');
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+async function request<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (init.body !== undefined) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (init.token) {
+    headers.set('Authorization', `Bearer ${init.token}`);
+  }
+  const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  if (!response.ok) {
+    let message = `Ошибка ${response.status}`;
+    try {
+      const body = (await response.json()) as { message?: unknown };
+      if (typeof body.message === 'string') {
+        message = body.message;
+      }
+    } catch {
+      // тело не JSON — оставляем общий текст
+    }
+    throw new ApiError(response.status, message);
+  }
+  return (await response.json()) as T;
+}
+
+export const api = {
+  loginWithTelegram: (initData: string) =>
+    request<AuthResponse>('/auth/telegram', { method: 'POST', body: JSON.stringify({ initData }) }),
+  me: (token: string) => request<MeDto>('/me', { token }),
+  interests: () => request<InterestDto[]>('/interests'),
+  completeOnboarding: (token: string, input: OnboardingInput) =>
+    request<MeDto>('/me/onboarding', { method: 'PUT', token, body: JSON.stringify(input) }),
+};

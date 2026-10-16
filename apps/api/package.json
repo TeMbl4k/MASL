@@ -1,0 +1,40 @@
+{
+  "name": "@masl/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nest build",
+    "dev": "node --env-file-if-exists=.env node_modules/@nestjs/cli/bin/nest.js start --watch",
+    "start": "node dist/main.js",
+    "lint": "oxlint --deny-warnings src/ test/",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dev:init-data": "node --env-file-if-exists=.env scripts/dev-init-data.mjs"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "@masl/db": "workspace:*",
+    "@masl/shared": "workspace:*",
+    "@nestjs/common": "^12.1.3",
+    "@nestjs/core": "^12.1.3",
+    "@nestjs/platform-fastify": "^12.1.3",
+    "@telegram-apps/init-data-node": "^2.0.10",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.5",
+    "jose": "^6.2.12",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.8",
+    "@nestjs/schematics": "^12.0.0",
+    "@nestjs/testing": "^12.1.3",
+    "@types/node": "^24.0.0",
+    "oxlint": "^1.58.0",
+    "source-map-support": "^0.5.21",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.8"
+  }
+}
