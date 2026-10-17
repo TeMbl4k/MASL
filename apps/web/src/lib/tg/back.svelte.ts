@@ -74,6 +74,16 @@ export function openSheet(sheet: Sheet, extra: Omit<App.PageState, 'sheet'> = {}
   return goto(page.url.href, { state: { ...page.state, ...extra, sheet }, shallow: true });
 }
 
+/**
+ * Replaces the open sheet with another one in the same history entry (the origin sheet hands
+ * over to the station picker), so one Back still returns to the page.
+ */
+export function switchSheet(sheet: Sheet, extra: Omit<App.PageState, 'sheet'> = {}): Promise<void> {
+  if (page.state.sheet === undefined) return openSheet(sheet, extra);
+  haptic.tap();
+  return goto(page.url.href, { state: { ...page.state, ...extra, sheet }, shallow: true, replace: true });
+}
+
 /** Closes the open sheet by going back to the entry under it. */
 export function closeSheet(): void {
   if (page.state.sheet !== undefined) history.back();
