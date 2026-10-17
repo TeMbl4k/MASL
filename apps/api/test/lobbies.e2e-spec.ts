@@ -1,5 +1,7 @@
-import { desc, eq } from 'drizzle-orm';
-import { lobbies, users } from '@masl/db';
+import { inspect } from 'node:util';
+import { Logger } from '@nestjs/common';
+import { desc, eq, sql } from 'drizzle-orm';
+import { lobbies, lobbyMembers, users } from '@masl/db';
 import {
   HOSTED_UPCOMING_MAX,
   LOBBY_MAX_DAYS_AHEAD,
@@ -20,6 +22,7 @@ import {
   CANARY_ADDRESS,
   CANARY_POINT,
   adminUrl,
+  assertNoExactPlace,
   authHeader,
   bootApp,
   insertLobby,
@@ -29,6 +32,7 @@ import {
   shiftLobby,
   type TestApp,
 } from './helpers.js';
+import { LobbyStatusSweeper } from '../src/lobbies/lobby-status.sweeper.js';
 
 const MINUTE = 60_000;
 /** Inside MOSCOW_BOUNDS, more than PLACE_MAX_FROM_METRO_M from any station. */
@@ -753,6 +757,223 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
 
     it('401 without a token', async () => {
       expect((await t.app.inject({ method: 'GET', url: '/api/me/lobbies' })).statusCode).toBe(401);
+    });
+  });
+
+  describe('POST /lobbies/:id/cancel', () => {
+    const cancel = (
+      token: string,
+      id: string,
+      payload: object = { reason: 'plans_changed', comment: 'Заболел' },
+    ) =>
+      t.app.inject({ method: 'POST', url: `/api/lobbies/${id}/cancel`, headers: authHeader(token), payload });
+    const membersOf = (lobbyId: string) =>
+      t.db
+        .select({
+          userId: lobbyMembers.userId,
+          status: lobbyMembers.status,
+          updatedAt: lobbyMembers.updatedAt,
+        })
+        .from(lobbyMembers)
+        .where(eq(lobbyMembers.lobbyId, lobbyId))
+        .orderBy(lobbyMembers.userId);
+    const karmaOf = async (userId: string) =>
+      (await t.db.select({ karma: users.karma }).from(users).where(eq(users.id, userId)))[0]!.karma;
+
+    it('cancels before the start: members see the reason, memberships and karma stay', async () => {
+      const host = await t.loginOnboarded();
+      const member = await t.loginOnboarded();
+      const applicant = await t.loginOnboarded();
+      const viewer = await t.loginOnboarded();
+      // Within an hour of the start: still no karma in Stage 2.
+      const lobby = await insertLobby(t.db, { hostId: host.user.id, startsInMin: 40, category: 'music' });
+      await setMembership(t.db, lobby.id, member.user.id, 'approved');
+      await setMembership(t.db, lobby.id, applicant.user.id, 'pending');
+      const before = await membersOf(lobby.id);
+      expect(await feedIds(viewer.token, '?category=music')).toEqual([lobby.id]);
+
+      const response = await cancel(host.token, lobby.id);
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['cache-control']).toBe('private, no-store');
+      const body = lobbyDetailDto.parse(response.json());
+      expect(body).toMatchObject({
+        status: 'cancelled',
+        cancelReason: 'plans_changed',
+        cancelComment: 'Заболел',
+        access: 'host',
+        exactPlace: { address: CANARY_ADDRESS },
+      });
+      const [row] = await t.db.select().from(lobbies).where(eq(lobbies.id, lobby.id));
+      expect(row).toMatchObject({
+        status: 'cancelled',
+        cancelReason: 'plans_changed',
+        cancelComment: 'Заболел',
+      });
+      expect(row!.cancelledAt).not.toBeNull();
+
+      for (const who of [member, applicant]) {
+        const seen = await t.app.inject({
+          method: 'GET',
+          url: `/api/lobbies/${lobby.id}`,
+          headers: authHeader(who.token),
+        });
+        expect(seen.json()).toMatchObject({
+          status: 'cancelled',
+          cancelReason: 'plans_changed',
+          cancelComment: 'Заболел',
+          access: 'public',
+        });
+        assertNoExactPlace(seen.json(), 'member after host cancel');
+      }
+      expect(await feedIds(viewer.token, '?category=music')).toEqual([]);
+      expect(await membersOf(lobby.id)).toEqual(before);
+      for (const who of [host, member, applicant]) expect(await karmaOf(who.user.id)).toBe(50);
+
+      // A repeat is idempotent and keeps the first reason.
+      const repeat = await cancel(host.token, lobby.id, { reason: 'other' });
+      expect(repeat.statusCode).toBe(200);
+      expect(repeat.json()).toMatchObject({ status: 'cancelled', cancelReason: 'plans_changed' });
+    });
+
+    it('the comment is optional; 400 for an unknown reason or a long comment', async () => {
+      const host = await t.loginOnboarded();
+      const lobby = await insertLobby(t.db, { hostId: host.user.id });
+      for (const payload of [{}, { reason: 'bored' }, { reason: 'other', comment: 'а'.repeat(201) }, []]) {
+        expect((await cancel(host.token, lobby.id, payload)).statusCode, JSON.stringify(payload)).toBe(400);
+      }
+      const response = await cancel(host.token, lobby.id, { reason: 'not_enough_people', comment: '  ' });
+      expect(response.json()).toMatchObject({ cancelReason: 'not_enough_people', cancelComment: null });
+    });
+
+    it('409 after the start; 403 for a non-host; 404 for a hidden or missing lobby (T-IDOR-3)', async () => {
+      const host = await t.loginOnboarded();
+      const member = await t.loginOnboarded();
+      const outsider = await t.loginOnboarded();
+      const lobby = await insertLobby(t.db, { hostId: host.user.id });
+      await setMembership(t.db, lobby.id, member.user.id, 'approved');
+
+      for (const who of [member, outsider]) {
+        const refused = await cancel(who.token, lobby.id);
+        expect(refused.statusCode).toBe(403);
+        expect(refused.json()).toEqual({
+          statusCode: 403,
+          code: 'not_host',
+          message: 'Управлять встречей может только хост',
+        });
+        assertNoExactPlace(refused.json(), 'not_host');
+      }
+      const missing = await cancel(host.token, crypto.randomUUID());
+      expect(missing.statusCode).toBe(404);
+      expect((await cancel(host.token, '..%2Fme')).statusCode).toBe(400);
+
+      await setUser(t.db, host.user.id, { isShadowBanned: true });
+      const hidden = await cancel(outsider.token, lobby.id);
+      expect(hidden.statusCode).toBe(404);
+      expect(hidden.body).toBe(missing.body);
+      expect((await cancel(member.token, lobby.id)).statusCode).toBe(403);
+      await setUser(t.db, host.user.id, { isShadowBanned: false });
+
+      const [row] = await t.db
+        .select({ status: lobbies.status })
+        .from(lobbies)
+        .where(eq(lobbies.id, lobby.id));
+      expect(row!.status).toBe('open');
+
+      await shiftLobby(t.db, lobby.id, { startsInMin: -1 });
+      const started = await cancel(host.token, lobby.id);
+      expect(started.statusCode).toBe(409);
+      expect(started.json()).toEqual({
+        statusCode: 409,
+        code: 'lobby_started',
+        message: 'Встреча уже началась',
+      });
+      await shiftLobby(t.db, lobby.id, { startsInMin: -300 });
+      expect((await cancel(host.token, lobby.id)).json()).toMatchObject({ code: 'lobby_started' });
+    });
+  });
+
+  describe('lobby status sweeper', () => {
+    beforeEach(async () => {
+      await t.db.delete(lobbies);
+    });
+
+    const statusOf = async (id: string) =>
+      (await t.db.select({ status: lobbies.status }).from(lobbies).where(eq(lobbies.id, id)))[0]!.status;
+
+    it('persists started and finished lobbies once; cancelled ones stay cancelled (T-STATE-3)', async () => {
+      const hostId = (await t.loginOnboarded()).user.id;
+      const upcoming = await insertLobby(t.db, { hostId, startsInMin: 30 });
+      const started = await insertLobby(t.db, { hostId, startsInMin: -10, durationMin: 60 });
+      const overdue = await insertLobby(t.db, { hostId, startsInMin: -300, durationMin: 60 });
+      const activeDone = await insertLobby(t.db, {
+        hostId,
+        startsInMin: -300,
+        durationMin: 60,
+        status: 'active',
+      });
+      const cancelled = await insertLobby(t.db, { hostId, startsInMin: -300, status: 'cancelled' });
+
+      const sweeper = t.app.get(LobbyStatusSweeper);
+      const result = await sweeper.sweep();
+      expect(result.started).toEqual([started.id]);
+      expect([...result.finished].sort()).toEqual([overdue.id, activeDone.id].sort());
+      expect(await statusOf(upcoming.id)).toBe('open');
+      expect(await statusOf(started.id)).toBe('active');
+      expect(await statusOf(overdue.id)).toBe('finished');
+      expect(await statusOf(cancelled.id)).toBe('cancelled');
+
+      expect(await sweeper.sweep()).toEqual({ started: [], finished: [] });
+
+      await shiftLobby(t.db, started.id, { startsInMin: -120, durationMin: 60 });
+      expect(await sweeper.sweep()).toEqual({ started: [], finished: [started.id] });
+    });
+
+    it('concurrent sweeps return each id once', async () => {
+      const hostId = (await t.loginOnboarded()).user.id;
+      const ids: string[] = [];
+      for (let i = 0; i < 5; i++) ids.push((await insertLobby(t.db, { hostId, startsInMin: -10 - i })).id);
+      const sweeper = t.app.get(LobbyStatusSweeper);
+      const results = await Promise.all([1, 2, 3].map(() => sweeper.sweep()));
+      const started = results.flatMap((r) => r.started);
+      expect(started.sort()).toEqual([...ids].sort());
+      expect(results.flatMap((r) => r.finished)).toEqual([]);
+    });
+
+    it('a sweep racing a host cancel leaves a consistent row', async () => {
+      const host = await t.loginOnboarded();
+      const lobby = await insertLobby(t.db, { hostId: host.user.id, startsInMin: 60 });
+      const sweeper = t.app.get(LobbyStatusSweeper);
+      const [response] = await Promise.all([
+        t.app.inject({
+          method: 'POST',
+          url: `/api/lobbies/${lobby.id}/cancel`,
+          headers: authHeader(host.token),
+          payload: { reason: 'other' },
+        }),
+        sweeper.sweep(),
+      ]);
+      expect(response.statusCode).toBe(200);
+      expect(await statusOf(lobby.id)).toBe('cancelled');
+      await shiftLobby(t.db, lobby.id, { startsInMin: -300, durationMin: 60 });
+      expect(await sweeper.sweep()).toEqual({ started: [], finished: [] });
+      expect(await statusOf(lobby.id)).toBe('cancelled');
+    });
+
+    it('a failed scheduled run logs only the redacted shape and does not throw', async () => {
+      const log = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+      await t.db.execute(sql`alter table lobbies rename to lobbies_x`);
+      try {
+        await expect(t.app.get(LobbyStatusSweeper).tick()).resolves.toBeUndefined();
+      } finally {
+        await t.db.execute(sql`alter table lobbies_x rename to lobbies`);
+      }
+      const calls = [...log.mock.calls];
+      log.mockRestore();
+      expect(calls).toHaveLength(1);
+      const logged = inspect(calls, { depth: 10 });
+      expect(logged).toContain('pgCode=42P01');
+      expect(logged).not.toContain('update');
+      expect(logged).not.toContain('lobbies_x');
     });
   });
 });

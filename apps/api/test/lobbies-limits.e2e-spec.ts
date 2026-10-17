@@ -135,6 +135,17 @@ describe.skipIf(!adminUrl)('lobby creation limits e2e (requires TEST_DATABASE_UR
       message: 'Создание встреч приостановлено. Обжаловать можно будет позже',
     });
     expect(await hostedCount(host.user.id)).toBe(0);
+
+    // The block stops creating, not managing: an existing lobby can still be cancelled.
+    const lobby = await insertLobby(t.db, { hostId: host.user.id });
+    const cancel = await t.app.inject({
+      method: 'POST',
+      url: `/api/lobbies/${lobby.id}/cancel`,
+      headers: authHeader(host.token),
+      payload: { reason: 'plans_changed' },
+    });
+    expect(cancel.statusCode).toBe(200);
+    expect(cancel.json()).toMatchObject({ status: 'cancelled' });
   });
 
   it('T-ABUSE-7 (create): a user who has not finished onboarding gets 403 not_onboarded', async () => {

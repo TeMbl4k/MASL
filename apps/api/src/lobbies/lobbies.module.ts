@@ -4,13 +4,14 @@ import { SessionModule } from '../session/session.module.js';
 import { FeedService } from './feed.service.js';
 import { LobbiesController } from './lobbies.controller.js';
 import { LobbiesService } from './lobbies.service.js';
+import { LobbyStatusSweeper } from './lobby-status.sweeper.js';
 import { MeLobbiesController } from './me-lobbies.controller.js';
 
 /** Lobbies, applications, feed and map. */
 @Module({
   imports: [SessionModule, KarmaModule],
   controllers: [LobbiesController, MeLobbiesController],
-  providers: [LobbiesService, FeedService],
+  providers: [LobbiesService, FeedService, LobbyStatusSweeper],
   exports: [LobbiesService],
 })
 export class LobbiesModule {}

@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Inject, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import {
+  cancelLobbyInput,
   createLobbyInput,
   creationContextDto,
   feedQuery,
@@ -9,6 +10,7 @@ import {
   lobbyDetailQuery,
   mapQuery,
   mapResponse,
+  type CancelLobbyInput,
   type CreateLobbyInput,
   type CreationContextDto,
   type FeedQuery,
@@ -90,5 +92,18 @@ export class LobbiesController {
     @Query(new ZodValidationPipe(lobbyDetailQuery)) query: LobbyDetailQuery,
   ): Promise<LobbyDetailDto> {
     return this.lobbies.detail(userId, id, originOf(query));
+  }
+
+  /** Host cancel before the start, with a reason; 200 also on a repeat. */
+  @Post(':id/cancel')
+  @HttpCode(200)
+  @RateLimit('lobbyWrite')
+  @ResponseSchema(lobbyDetailDto)
+  cancel(
+    @CurrentUserId() userId: string,
+    @Param('id', new ZodValidationPipe(idParam)) id: string,
+    @Body(new ZodValidationPipe(cancelLobbyInput)) body: CancelLobbyInput,
+  ): Promise<LobbyDetailDto> {
+    return this.lobbies.cancel(userId, id, body);
   }
 }

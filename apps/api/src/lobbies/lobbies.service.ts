@@ -13,6 +13,7 @@ import {
   effectiveLobbyStatus,
   truncateToMinute,
   validateLobbyStart,
+  type CancelLobbyInput,
   type CreateBlockReason,
   type CreateLobbyInput,
   type CreationContextDto,
@@ -30,6 +31,7 @@ import {
   loadExactPlace,
   loadLobbyForViewer,
   loadViewerContext,
+  lockLobby,
   membersQuery,
   roundOrigin,
   type CreationCounters,
@@ -200,21 +202,58 @@ export class LobbiesService {
   }
 
   /**
-   * The detail as the viewer may see it, or 404 `lobby_not_found` for a missing or hidden lobby
-   * (the same query and the same body). Exact place and members are loaded only when allowed.
+   * Host cancel, before the start only (spec §5.6). Memberships stay as they are (the Stage 3
+   * snapshot of who was in) and no karma moves. A repeat on a cancelled lobby is a 200.
    */
-  async detailFor(db: Executor, request: DetailRequest): Promise<LobbyDetailDto> {
-    const { lobbyId, viewerId, now } = request;
-    const row = await loadLobbyForViewer(db, lobbyId, viewerId, roundOrigin(request.origin));
+  async cancel(viewerId: string, lobbyId: string, input: CancelLobbyInput): Promise<LobbyDetailDto> {
+    const now = this.clock.now();
+    return this.db.transaction(async (tx) => {
+      if (!(await lockLobby(tx, lobbyId))) throw apiError('lobby_not_found');
+      const { row, rights, effectiveStatus } = await this.visibleLobby(tx, lobbyId, viewerId, now);
+      if (!rights.isHost) throw apiError('not_host');
+      if (row.status !== 'cancelled') {
+        if (effectiveStatus !== 'open') throw apiError('lobby_started');
+        await tx
+          .update(lobbies)
+          .set({
+            status: 'cancelled',
+            cancelledAt: now,
+            cancelReason: input.reason,
+            cancelComment: input.comment,
+            updatedAt: now,
+          })
+          .where(eq(lobbies.id, lobbyId));
+      }
+      return this.detailFor(tx, { lobbyId, viewerId, now });
+    });
+  }
+
+  /**
+   * The lobby with the viewer's rights, or 404 `lobby_not_found` for a missing or hidden one:
+   * both take the same query and give the same body.
+   */
+  async visibleLobby(db: Executor, lobbyId: string, viewerId: string, now: Date, origin?: GeoPoint | null) {
+    const row = await loadLobbyForViewer(db, lobbyId, viewerId, roundOrigin(origin));
     if (!row) throw apiError('lobby_not_found');
+    const effectiveStatus = effectiveLobbyStatus(row, now);
     const rights = resolveLobbyAccess({
       viewerId,
       hostId: row.hostId,
       hostShadowBanned: row.hostShadowBanned,
       membership: membershipOf(row),
-      effectiveStatus: effectiveLobbyStatus(row, now),
+      effectiveStatus,
     });
     if (!rights.visible) throw apiError('lobby_not_found');
+    return { row, rights, effectiveStatus };
+  }
+
+  /**
+   * The detail as the viewer may see it (404 when hidden). Exact place and members are loaded
+   * only when the access rule allows.
+   */
+  async detailFor(db: Executor, request: DetailRequest): Promise<LobbyDetailDto> {
+    const { lobbyId, viewerId, now } = request;
+    const { row, rights } = await this.visibleLobby(db, lobbyId, viewerId, now, request.origin);
     const viewer = request.viewer ?? (await this.viewer(db, viewerId, now));
 
     let access: DetailAccess = { access: 'public' };
