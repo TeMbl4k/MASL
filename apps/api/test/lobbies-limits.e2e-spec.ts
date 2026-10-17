@@ -8,7 +8,17 @@ import {
   formatMoscowTime,
   type ApiErrorDto,
 } from '@masl/shared';
-import { addKarmaEvent, adminUrl, bootApp, setUser, shiftCreatedAt, type TestApp } from './helpers.js';
+import {
+  addKarmaEvent,
+  adminUrl,
+  authHeader,
+  bootApp,
+  insertLobby,
+  setMembership,
+  setUser,
+  shiftCreatedAt,
+  type TestApp,
+} from './helpers.js';
 
 const DAY_MS = 24 * 3600_000;
 
@@ -159,5 +169,42 @@ describe.skipIf(!adminUrl)('lobby creation limits e2e (requires TEST_DATABASE_UR
     expect(limited.statusCode).toBe(429);
     expect(limited.json()).toMatchObject({ code: 'rate_limited' });
     expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
+  });
+
+  it('T-ABUSE-4 (discovery): a shadow-banned host’s lobbies are hidden from others, kept for the host and members', async () => {
+    const host = await t.loginOnboarded();
+    const outsider = await t.loginOnboarded();
+    const pending = await t.loginOnboarded();
+    const approved = await t.loginOnboarded();
+    const lobby = await insertLobby(t.db, { hostId: host.user.id, category: 'culture' });
+    await setMembership(t.db, lobby.id, pending.user.id, 'pending');
+    await setMembership(t.db, lobby.id, approved.user.id, 'approved');
+    const get = (token: string, url: string) =>
+      t.app.inject({ method: 'GET', url, headers: authHeader(token) });
+    const inFeed = async (token: string) =>
+      (await get(token, '/api/lobbies/feed?category=culture&limit=50'))
+        .json()
+        .items.some((i: { id: string }) => i.id === lobby.id);
+    const onMap = async (token: string) =>
+      (await get(token, '/api/lobbies/map?category=culture'))
+        .json()
+        .stations.some((s: { lobbies: { id: string }[] }) => s.lobbies.some((l) => l.id === lobby.id));
+    expect(await inFeed(outsider.token)).toBe(true);
+
+    await setUser(t.db, host.user.id, { isShadowBanned: true });
+    expect(await inFeed(outsider.token)).toBe(false);
+    expect(await onMap(outsider.token)).toBe(false);
+    expect((await get(outsider.token, `/api/lobbies/${lobby.id}`)).statusCode).toBe(404);
+
+    for (const member of [pending, approved]) {
+      expect(await inFeed(member.token)).toBe(true);
+      expect(await onMap(member.token)).toBe(true);
+      expect((await get(member.token, `/api/lobbies/${lobby.id}`)).statusCode).toBe(200);
+      const mine = (await get(member.token, '/api/me/lobbies')).json();
+      expect(mine.joined.upcoming.map((l: { id: string }) => l.id)).toEqual([lobby.id]);
+    }
+    expect((await get(host.token, `/api/lobbies/${lobby.id}`)).json().access).toBe('host');
+    const hosted = (await get(host.token, '/api/me/lobbies')).json();
+    expect(hosted.hosting.upcoming.map((l: { id: string }) => l.id)).toEqual([lobby.id]);
   });
 });

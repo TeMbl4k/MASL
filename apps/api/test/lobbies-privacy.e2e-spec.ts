@@ -1,6 +1,14 @@
 import { eq, sql } from 'drizzle-orm';
 import { geographyFrom, lobbies } from '@masl/db';
-import { lobbyDetailDto, roundDistance, roundViewerCoord, type LobbyDetailDto } from '@masl/shared';
+import {
+  feedResponse,
+  lobbyDetailDto,
+  mapResponse,
+  myLobbiesResponse,
+  roundDistance,
+  roundViewerCoord,
+  type LobbyDetailDto,
+} from '@masl/shared';
 import { MOSCOW_STATIONS, nearestStation, placeHint, stationById } from '@masl/shared/metro';
 import {
   CANARY_ADDRESS,
@@ -24,7 +32,7 @@ const VIEWERS = [CANARY_POINT, { lat: 55.7767, lng: 37.5821 }, { lat: 55.7512345
 const FORBIDDEN_PERSON_KEYS = ['id', 'userId', 'username', 'telegramId', 'lastName', 'gender', 'age'];
 
 /** Fails if any person object in the body carries identifying fields beyond the public ones. */
-function assertPeopleArePublic(body: LobbyDetailDto) {
+function assertPeopleArePublic(body: Pick<LobbyDetailDto, 'host'> & { members?: LobbyDetailDto['members'] }) {
   for (const person of [body.host, ...(body.members ?? [])]) {
     expect(Object.keys(person).sort()).toEqual(['firstName', 'karma', 'photoUrl']);
     for (const key of FORBIDDEN_PERSON_KEYS) expect(person).not.toHaveProperty(key);
@@ -245,5 +253,98 @@ describe.skipIf(!adminUrl)('lobby privacy e2e (requires TEST_DATABASE_URL)', () 
       expect(response.statusCode, url).toBeGreaterThanOrEqual(400);
       assertNoExactPlace(response.json(), url);
     }
+  });
+
+  const get = async (token: string, url: string) => {
+    const response = await t.app.inject({ method: 'GET', url, headers: authHeader(token) });
+    expect(response.statusCode, `${url}: ${response.body}`).toBe(200);
+    expect(response.headers['cache-control'], url).toBe('private, no-store');
+    return response.json();
+  };
+
+  describe('lists', () => {
+    beforeEach(async () => {
+      await t.db.delete(lobbies);
+    });
+
+    it('T-PRIV-1/8: no exact place in the feed, map and «Мои», not even for the host', async () => {
+      const { host, lobby, roles } = await lobbyWithRoles();
+      const cinema = await insertLobby(t.db, { hostId: host.user.id, category: 'cinema' });
+      const day = new Date(Date.now() + 24 * 3600_000);
+      const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow' }).format(day);
+      const origins = ['', `lat=${CANARY_POINT.lat}&lng=${CANARY_POINT.lng}`, 'lat=55.7767&lng=37.5821'];
+      const filters = ['', 'category=sport', 'category=cinema', `day=${dayKey}`, 'limit=1'];
+      for (const role of [...Object.values(roles), host]) {
+        let seen = 0;
+        for (const origin of origins) {
+          for (const filter of filters) {
+            const url = `/api/lobbies/feed?${[origin, filter].filter(Boolean).join('&')}`;
+            const body = feedResponse.parse(await get(role.token, url));
+            assertNoExactPlace(body, url);
+            body.items.forEach(assertPeopleArePublic);
+            seen += body.items.length;
+            if (body.nextCursor) {
+              const next = await get(role.token, `${url}&cursor=${body.nextCursor}`);
+              assertNoExactPlace(next, `${url} page 2`);
+            }
+          }
+        }
+        for (const filter of ['', 'category=sport', `day=${dayKey}`]) {
+          const map = mapResponse.parse(await get(role.token, `/api/lobbies/map?${filter}`));
+          assertNoExactPlace(map, `map ${filter}`);
+          map.stations.forEach((s) => s.lobbies.forEach(assertPeopleArePublic));
+        }
+        const mine = myLobbiesResponse.parse(await get(role.token, '/api/me/lobbies'));
+        assertNoExactPlace(mine, 'my lobbies');
+        assertNoExactPlace(await get(role.token, '/api/lobbies/creation-context'), 'creation-context');
+        // The roles that can discover the lobbies did see them, so the checks were not vacuous.
+        if (role === roles.outsider || role === roles.approved) expect(seen).toBeGreaterThan(0);
+      }
+      const hostMine = myLobbiesResponse.parse(await get(host.token, '/api/me/lobbies'));
+      expect(hostMine.hosting.upcoming.map((l) => l.id).sort()).toEqual([lobby.id, cinema.id].sort());
+      const approvedMine = myLobbiesResponse.parse(await get(roles.approved.token, '/api/me/lobbies'));
+      expect(approvedMine.joined.upcoming.map((l) => l.id)).toEqual([lobby.id]);
+    });
+
+    it('T-PRIV-4 (feed): distances come from the station point and match PostGIS', async () => {
+      const host = await t.loginOnboarded();
+      const viewer = await t.loginOnboarded();
+      await insertLobby(t.db, { hostId: host.user.id, exact: CANARY_POINT });
+      await insertLobby(t.db, { hostId: host.user.id, exact: OTHER_SIDE });
+      const station = nearestStation(CANARY_POINT).station;
+      for (const v of VIEWERS) {
+        const rounded = { lat: roundViewerCoord(v.lat), lng: roundViewerCoord(v.lng) };
+        const [row] = await t.db.execute<{ d: number }>(
+          sql`select ST_Distance(${geographyFrom(station)}, ${geographyFrom(rounded)}) as d`,
+        );
+        const body = feedResponse.parse(
+          await get(viewer.token, `/api/lobbies/feed?lat=${v.lat}&lng=${v.lng}`),
+        );
+        expect(body.items.map((i) => i.distanceM)).toEqual([
+          roundDistance(Number(row!.d)),
+          roundDistance(Number(row!.d)),
+        ]);
+      }
+    });
+
+    it('T-PRIV-5: two lobbies at one station rank the same from either exact point', async () => {
+      const host = await t.loginOnboarded();
+      const viewer = await t.loginOnboarded();
+      const same = { hostId: host.user.id, startsInMin: 26 * 60, now: new Date() };
+      const l1 = await insertLobby(t.db, { ...same, exact: CANARY_POINT });
+      const l2 = await insertLobby(t.db, { ...same, exact: OTHER_SIDE });
+      const [s1, s2] = await t.db
+        .select({ startsAt: lobbies.startsAt })
+        .from(lobbies)
+        .where(sql`${lobbies.id} in (${l1.id}, ${l2.id})`);
+      expect(s1!.startsAt.getTime()).toBe(s2!.startsAt.getTime());
+      const byId = [l1.id, l2.id].sort();
+      for (const v of [CANARY_POINT, OTHER_SIDE]) {
+        const body = feedResponse.parse(
+          await get(viewer.token, `/api/lobbies/feed?lat=${v.lat}&lng=${v.lng}`),
+        );
+        expect(body.items.map((i) => i.id)).toEqual(byId);
+      }
+    });
   });
 });

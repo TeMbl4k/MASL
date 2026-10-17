@@ -1,11 +1,17 @@
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { lobbies, users } from '@masl/db';
 import {
   HOSTED_UPCOMING_MAX,
   LOBBY_MAX_DAYS_AHEAD,
   NEWBIE_LOBBIES_PER_DAY,
+  MAP_LOBBIES_MAX,
   creationContextDto,
+  feedResponse,
   lobbyDetailDto,
+  mapResponse,
+  myLobbiesResponse,
+  type LobbyCardDto,
+  moscowDayKey,
   type CreationContextDto,
   type LobbyDetailDto,
 } from '@masl/shared';
@@ -445,6 +451,308 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
     it('401 without a token', async () => {
       const response = await t.app.inject({ method: 'GET', url: `/api/lobbies/${crypto.randomUUID()}` });
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  const get = (token: string, url: string) =>
+    t.app.inject({ method: 'GET', url, headers: authHeader(token) });
+  const feedOf = async (token: string, query = '') => {
+    const response = await get(token, `/api/lobbies/feed${query}`);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    return feedResponse.parse(response.json());
+  };
+  const feedIds = async (token: string, query = '') => (await feedOf(token, query)).items.map((i) => i.id);
+  const mapOf = async (token: string, query = '') => {
+    const response = await get(token, `/api/lobbies/map${query}`);
+    expect(response.statusCode, response.body).toBe(200);
+    return mapResponse.parse(response.json());
+  };
+  const mapIds = async (token: string, query = '') =>
+    (await mapOf(token, query)).stations.flatMap((s) => s.lobbies.map((l) => l.id));
+
+  /** A viewer, and one lobby for each discovery rule, by name. */
+  async function discoveryFixture() {
+    const viewer = await t.loginOnboarded();
+    const host = await t.loginOnboarded();
+    const other = await t.loginOnboarded();
+    const hostId = host.user.id;
+    const open = await insertLobby(t.db, { hostId, startsInMin: 3 * 60 });
+    const cancelled = await insertLobby(t.db, { hostId, status: 'cancelled' });
+    const started = await insertLobby(t.db, { hostId, startsInMin: -10 });
+    const own = await insertLobby(t.db, { hostId: viewer.user.id });
+    const full = await insertLobby(t.db, { hostId, slots: 1 });
+    await setMembership(t.db, full.id, other.user.id, 'approved');
+    const fullPending = await insertLobby(t.db, { hostId, slots: 1 });
+    await setMembership(t.db, fullPending.id, other.user.id, 'approved');
+    await setMembership(t.db, fullPending.id, viewer.user.id, 'pending');
+    const fullApproved = await insertLobby(t.db, { hostId, slots: 1 });
+    await setMembership(t.db, fullApproved.id, viewer.user.id, 'approved');
+    const rejected = await insertLobby(t.db, { hostId });
+    await setMembership(t.db, rejected.id, viewer.user.id, 'rejected');
+    const left = await insertLobby(t.db, { hostId });
+    await setMembership(t.db, left.id, viewer.user.id, 'cancelled', { decided: true });
+    const withdrawn = await insertLobby(t.db, { hostId });
+    await setMembership(t.db, withdrawn.id, viewer.user.id, 'cancelled');
+    const locked = await insertLobby(t.db, { hostId, minKarma: 60, startsInMin: 60 });
+    const cinema = await insertLobby(t.db, { hostId, category: 'cinema', startsInMin: 3 * 24 * 60 });
+    return {
+      viewer,
+      host,
+      shown: { open, fullPending, fullApproved, withdrawn, locked, cinema },
+      hidden: { cancelled, started, own, full, rejected, left },
+    };
+  }
+
+  describe('GET /lobbies/feed', () => {
+    beforeEach(async () => {
+      await t.db.delete(lobbies);
+    });
+
+    it('shows discoverable lobbies only, locked ones last with applyBlock karma', async () => {
+      const { viewer, shown, hidden } = await discoveryFixture();
+      const body = await feedOf(viewer.token);
+      const ids = body.items.map((i) => i.id);
+      expect([...ids].sort()).toEqual(
+        Object.values(shown)
+          .map((l) => l.id)
+          .sort(),
+      );
+      for (const lobby of Object.values(hidden)) expect(ids).not.toContain(lobby.id);
+      expect(ids.at(-1)).toBe(shown.locked.id);
+      const byId = new Map<string, LobbyCardDto>(body.items.map((i) => [i.id, i]));
+      expect(byId.get(shown.locked.id)!.viewer.applyBlock).toBe('karma');
+      expect(byId.get(shown.fullPending.id)!.viewer).toEqual({
+        isHost: false,
+        membershipStatus: 'pending',
+        applyBlock: null,
+      });
+      expect(byId.get(shown.withdrawn.id)!.viewer).toMatchObject({
+        membershipStatus: 'cancelled',
+        applyBlock: null,
+      });
+      expect(byId.get(shown.open.id)!.distanceM).toBeNull();
+      expect(body.nextCursor).toBeNull();
+    });
+
+    it('filters by category and day; day counts come on the first page only', async () => {
+      const { viewer, shown } = await discoveryFixture();
+      expect(await feedIds(viewer.token, '?category=cinema')).toEqual([shown.cinema.id]);
+      const day = new Date(Date.now() + 3 * 24 * 3600_000);
+      const dayKey = moscowDayKey(day);
+      expect(await feedIds(viewer.token, `?day=${dayKey}`)).toContain(shown.cinema.id);
+      expect(await feedIds(viewer.token, `?day=${dayKey}&category=sport`)).not.toContain(shown.cinema.id);
+
+      const first = await feedOf(viewer.token, '?limit=2');
+      expect(first.items).toHaveLength(2);
+      expect(first.days).toHaveLength(7);
+      expect(first.days!.reduce((n, d) => n + d.count, 0)).toBe(Object.keys(shown).length);
+      expect(first.nextCursor).not.toBeNull();
+      const second = await feedOf(viewer.token, `?limit=2&cursor=${first.nextCursor}`);
+      expect(second.days).toBeNull();
+      expect(second.items.map((i) => i.id)).not.toContain(first.items[0]!.id);
+    });
+
+    it('400 for a tampered cursor or malformed query (T-VAL-1)', async () => {
+      const { viewer } = await discoveryFixture();
+      const first = await feedOf(viewer.token, '?limit=2');
+      const tampered = Buffer.from(
+        JSON.stringify({ ...JSON.parse(Buffer.from(first.nextCursor!, 'base64url').toString()), s: '99' }),
+      ).toString('base64url');
+      for (const query of [
+        `?limit=2&cursor=${tampered}x`,
+        `?limit=2&cursor=garbage`,
+        `?limit=2&category=cinema&cursor=${first.nextCursor}`,
+      ]) {
+        const response = await get(viewer.token, `/api/lobbies/feed${query}`);
+        expect(response.statusCode, query).toBe(400);
+        expect(response.json()).toEqual({
+          statusCode: 400,
+          code: 'invalid_cursor',
+          message: 'Список устарел — обновите ленту',
+        });
+      }
+      for (const query of [
+        '?limit=1000',
+        '?limit=0',
+        '?limit=abc',
+        '?lat=55.75',
+        '?lat=NaN&lng=37.6',
+        '?lat=55.75&lng=200',
+        '?category=casino',
+        '?day=2026-02-30',
+        `?cursor=${'a'.repeat(600)}`,
+      ]) {
+        expect((await get(viewer.token, `/api/lobbies/feed${query}`)).statusCode, query).toBe(400);
+      }
+      // Empty parameters are missing ones.
+      expect(
+        (await get(viewer.token, '/api/lobbies/feed?lat=&lng=&limit=&category=&day=&cursor=')).statusCode,
+      ).toBe(200);
+    });
+  });
+
+  describe('GET /lobbies/map', () => {
+    beforeEach(async () => {
+      await t.db.delete(lobbies);
+    });
+
+    it('groups discoverable lobbies by station, earliest first, without distances', async () => {
+      const { viewer, shown, hidden } = await discoveryFixture();
+      const teply = await insertLobby(t.db, {
+        hostId: (await t.loginOnboarded()).user.id,
+        exact: { lat: 55.6195, lng: 37.5085 },
+        startsInMin: 30,
+      });
+      const body = await mapOf(viewer.token);
+      expect(body.truncated).toBe(false);
+      expect(body.stations).toHaveLength(2);
+      const [first, second] = body.stations;
+      expect(first!.place.stationId).toBe(nearestStation({ lat: 55.6195, lng: 37.5085 }).station.id);
+      expect(first!.lobbies.map((l) => l.id)).toEqual([teply.id]);
+      expect(second!.place).toMatchObject({ stationId: '2-dinamo', hint: 'м. Динамо' });
+      const ids = second!.lobbies.map((l) => l.id);
+      expect([...ids].sort()).toEqual(
+        Object.values(shown)
+          .map((l) => l.id)
+          .sort(),
+      );
+      const starts = second!.lobbies.map((l) => l.startsAt);
+      expect(starts).toEqual([...starts].sort());
+      for (const lobby of Object.values(hidden)) expect(ids).not.toContain(lobby.id);
+      for (const station of body.stations) {
+        for (const lobby of station.lobbies) {
+          expect(lobby.distanceM).toBeNull();
+          expect(lobby.place).toEqual(station.place);
+        }
+      }
+      expect(await mapIds(viewer.token, '?category=cinema')).toEqual([shown.cinema.id]);
+    });
+
+    it(`is truncated above ${MAP_LOBBIES_MAX} lobbies, keeping the earliest`, async () => {
+      const viewer = await t.loginOnboarded();
+      const host = await t.loginOnboarded();
+      for (let i = 0; i <= MAP_LOBBIES_MAX; i++) {
+        await insertLobby(t.db, { hostId: host.user.id, startsInMin: 60 + i });
+      }
+      const body = await mapOf(viewer.token);
+      expect(body.truncated).toBe(true);
+      const lobbiesShown = body.stations.flatMap((s) => s.lobbies);
+      expect(lobbiesShown).toHaveLength(MAP_LOBBIES_MAX);
+      const latest = Math.max(...lobbiesShown.map((l) => Date.parse(l.startsAt)));
+      const [row] = await t.db
+        .select({ startsAt: lobbies.startsAt })
+        .from(lobbies)
+        .orderBy(desc(lobbies.startsAt))
+        .limit(1);
+      expect(latest).toBeLessThan(row!.startsAt.getTime());
+    });
+
+    it('400 for a malformed query', async () => {
+      const viewer = await t.loginOnboarded();
+      for (const query of ['?category=casino', '?day=tomorrow']) {
+        expect((await get(viewer.token, `/api/lobbies/map${query}`)).statusCode, query).toBe(400);
+      }
+    });
+  });
+
+  describe('GET /me/lobbies', () => {
+    const mine = async (token: string) => {
+      const response = await get(token, '/api/me/lobbies');
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['cache-control']).toBe('private, no-store');
+      return myLobbiesResponse.parse(response.json());
+    };
+    const idsOf = (cards: LobbyCardDto[]) => cards.map((c) => c.id);
+
+    it('splits hosted lobbies into upcoming and past/cancelled', async () => {
+      const host = await t.loginOnboarded();
+      const hostId = host.user.id;
+      const later = await insertLobby(t.db, { hostId, startsInMin: 48 * 60 });
+      const soon = await insertLobby(t.db, { hostId, startsInMin: 60 });
+      const active = await insertLobby(t.db, { hostId, startsInMin: -10 });
+      const finished = await insertLobby(t.db, { hostId, startsInMin: -300 });
+      const cancelled = await insertLobby(t.db, { hostId, status: 'cancelled', startsInMin: 120 });
+      const member = await t.loginOnboarded();
+      await setMembership(t.db, soon.id, member.user.id, 'approved');
+      const applicant = await t.loginOnboarded();
+      await setMembership(t.db, soon.id, applicant.user.id, 'pending');
+
+      const body = await mine(host.token);
+      expect(idsOf(body.hosting.upcoming)).toEqual([active.id, soon.id, later.id]);
+      expect(idsOf(body.hosting.past)).toEqual([cancelled.id, finished.id]);
+      expect(body.joined).toEqual({ upcoming: [], past: [] });
+      expect(body.counts).toEqual({ hosted: 4, joined: 0 });
+      expect(body.hosting.upcoming[1]).toMatchObject({
+        approvedCount: 1,
+        pendingCount: 1,
+        viewer: { isHost: true },
+      });
+      expect(body.hosting.upcoming.map((c) => c.status)).toEqual(['active', 'open', 'open']);
+    });
+
+    it('splits joined lobbies; rejected and left are past, a withdrawn application is absent', async () => {
+      const viewer = await t.loginOnboarded();
+      const hostId = (await t.loginOnboarded()).user.id;
+      const pending = await insertLobby(t.db, { hostId, startsInMin: 120 });
+      const approved = await insertLobby(t.db, { hostId, startsInMin: 60 });
+      const approvedActive = await insertLobby(t.db, { hostId, startsInMin: -10 });
+      const rejected = await insertLobby(t.db, { hostId, startsInMin: 180 });
+      const left = await insertLobby(t.db, { hostId, startsInMin: 240 });
+      const withdrawn = await insertLobby(t.db, { hostId, startsInMin: 300 });
+      const approvedFinished = await insertLobby(t.db, { hostId, startsInMin: -600 });
+      const pendingCancelled = await insertLobby(t.db, { hostId, status: 'cancelled', startsInMin: 90 });
+      const attended = await insertLobby(t.db, { hostId, startsInMin: -900 });
+      const unrelated = await insertLobby(t.db, { hostId, startsInMin: 30 });
+      await setMembership(t.db, pending.id, viewer.user.id, 'pending');
+      await setMembership(t.db, approved.id, viewer.user.id, 'approved');
+      await setMembership(t.db, approvedActive.id, viewer.user.id, 'approved');
+      await setMembership(t.db, rejected.id, viewer.user.id, 'rejected');
+      await setMembership(t.db, left.id, viewer.user.id, 'cancelled', { decided: true });
+      await setMembership(t.db, withdrawn.id, viewer.user.id, 'cancelled');
+      await setMembership(t.db, approvedFinished.id, viewer.user.id, 'approved');
+      await setMembership(t.db, pendingCancelled.id, viewer.user.id, 'pending');
+      await setMembership(t.db, attended.id, viewer.user.id, 'attended');
+
+      const body = await mine(viewer.token);
+      expect(idsOf(body.joined.upcoming)).toEqual([approvedActive.id, approved.id, pending.id]);
+      expect(idsOf(body.joined.past)).toEqual([
+        left.id,
+        rejected.id,
+        pendingCancelled.id,
+        approvedFinished.id,
+        attended.id,
+      ]);
+      const all = [...idsOf(body.joined.upcoming), ...idsOf(body.joined.past)];
+      expect(all).not.toContain(withdrawn.id);
+      expect(all).not.toContain(unrelated.id);
+      expect(body.hosting).toEqual({ upcoming: [], past: [] });
+      expect(body.counts).toEqual({ hosted: 0, joined: 4 });
+      expect(body.joined.past[0]!.viewer).toMatchObject({
+        membershipStatus: 'cancelled',
+        applyBlock: 'left',
+      });
+    });
+
+    it('T-IDOR-4: user B never sees user A’s lobbies in «Мои»', async () => {
+      const a = await t.loginOnboarded();
+      const b = await t.loginOnboarded();
+      const hosted = await insertLobby(t.db, { hostId: a.user.id });
+      const joined = await insertLobby(t.db, { hostId: (await t.loginOnboarded()).user.id });
+      await setMembership(t.db, joined.id, a.user.id, 'approved');
+      const sneaky = await get(b.token, `/api/me/lobbies?userId=${a.user.id}`);
+      expect(sneaky.json()).toEqual({
+        hosting: { upcoming: [], past: [] },
+        joined: { upcoming: [], past: [] },
+        counts: { hosted: 0, joined: 0 },
+      });
+      const own = await mine(a.token);
+      expect(idsOf(own.hosting.upcoming)).toEqual([hosted.id]);
+      expect(idsOf(own.joined.upcoming)).toEqual([joined.id]);
+    });
+
+    it('401 without a token', async () => {
+      expect((await t.app.inject({ method: 'GET', url: '/api/me/lobbies' })).statusCode).toBe(401);
     });
   });
 });
