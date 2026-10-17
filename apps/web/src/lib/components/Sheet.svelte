@@ -10,12 +10,14 @@
     /** Open while `page.state.sheet` equals it; open with `openSheet(name)` from tg/back.svelte.ts. */
     name: SheetName;
     title: string;
+    /** Inline before the title text, e.g. metro line dots. */
+    titlePrefix?: Snippet;
     children: Snippet;
     /** Sticky bottom area, e.g. the «Сохранить» button. */
     footer?: Snippet;
   }
 
-  let { name, title, children, footer }: Props = $props();
+  let { name, title, titlePrefix, children, footer }: Props = $props();
 
   const open = $derived(page.state.sheet === name);
   const titleId = $derived(`sheet-${name}-title`);
@@ -86,7 +88,10 @@
     >
       <div class="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-gray-dark" aria-hidden="true"></div>
       <div class="flex shrink-0 items-center justify-between gap-3 px-5 pt-3 pb-2">
-        <h2 id={titleId} class="text-lg font-semibold">{title}</h2>
+        <h2 id={titleId} class="flex min-w-0 items-center gap-2 text-lg font-semibold">
+          {@render titlePrefix?.()}
+          <span class="min-w-0">{title}</span>
+        </h2>
         <button
           type="button"
           aria-label="Закрыть"
