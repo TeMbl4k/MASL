@@ -8,6 +8,7 @@ import {
   LOBBY_DEFAULT_SLOTS,
   classifyMetroDistance,
   type AuthResponse,
+  type CreateLobbyInput,
   type KarmaReason,
   type LobbyCategory,
   type LobbyStatus,
@@ -46,7 +47,32 @@ export const CANARY_POINT: LatLng = { lat: 55.7835, lng: 37.552 };
   }
 }
 
+/** A response of app.inject(). */
+export type InjectResponse = Awaited<ReturnType<NestFastifyApplication['inject']>>;
+
 export const authHeader = (token: string) => ({ authorization: `Bearer ${token}` });
+
+/**
+ * A valid create body: the canary exact place, tomorrow at the next whole minute, a fresh
+ * requestId. Overrides replace fields as they are (JSON-like values for invalid-input tests).
+ */
+export function lobbyInput(overrides: Partial<Record<keyof CreateLobbyInput, unknown>> = {}) {
+  const startsAt = new Date(Math.ceil((Date.now() + 24 * HOUR_MS) / MINUTE_MS) * MINUTE_MS);
+  return {
+    category: 'sport',
+    title: 'Падел 2×2',
+    description: 'Ищем ещё двоих',
+    startsAt: startsAt.toISOString(),
+    durationMinutes: 120,
+    location: { ...CANARY_POINT },
+    address: CANARY_ADDRESS,
+    slots: 3,
+    minKarma: null,
+    paymentFormat: 'split',
+    requestId: crypto.randomUUID(),
+    ...overrides,
+  };
+}
 
 let telegramIdSeq = 0;
 /** A Telegram id no other user of this test process has. */
@@ -69,6 +95,8 @@ export interface TestApp {
   login: (telegramId?: number, firstName?: string) => Promise<AuthResponse>;
   onboard: (token: string, interests?: string[]) => Promise<MeDto>;
   loginOnboarded: (telegramId?: number, firstName?: string) => Promise<AuthResponse>;
+  /** POST /api/lobbies with lobbyInput(overrides); the raw response. */
+  createLobby: (token: string, overrides?: Parameters<typeof lobbyInput>[0]) => Promise<InjectResponse>;
 }
 
 /** A per-file test database and app, as in app.e2e-spec.ts. */
@@ -136,6 +164,13 @@ export async function bootApp(options: BootOptions = {}): Promise<TestApp> {
       const auth = await login(telegramId, firstName);
       return { ...auth, user: await onboard(auth.token) };
     },
+    createLobby: (token, overrides) =>
+      ready.inject({
+        method: 'POST',
+        url: '/api/lobbies',
+        headers: authHeader(token),
+        payload: lobbyInput(overrides),
+      }),
   };
 }
 
