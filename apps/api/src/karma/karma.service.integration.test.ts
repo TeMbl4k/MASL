@@ -8,12 +8,13 @@ import { KarmaService } from './karma.service.js';
 describe.skipIf(!adminUrl)('KarmaService.apply (requires TEST_DATABASE_URL)', () => {
   let testDb: TestDatabase;
   let handle: DbHandle;
-  const karma = new KarmaService();
+  let karma: KarmaService;
   const now = new Date('2026-10-17T12:00:00.000Z');
 
   beforeAll(async () => {
     testDb = await createTestDatabase(adminUrl!);
     handle = createDb(testDb.url, { max: 4 });
+    karma = new KarmaService(handle.db);
   });
 
   afterAll(async () => {

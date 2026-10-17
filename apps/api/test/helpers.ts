@@ -290,7 +290,7 @@ export async function addKarmaEvent(
     throw new Error(`addKarmaEvent: pass a delta for ${reason}`);
   }
   await db.transaction((tx) =>
-    new KarmaService().apply(tx, {
+    new KarmaService(db).apply(tx, {
       userId,
       lobbyId: options.lobbyId ?? null,
       reason,
