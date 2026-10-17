@@ -5,6 +5,8 @@ import {
   roundDistance,
   APPLICATIONS_PENDING_MAX,
   APPLICATIONS_PER_DAY_MAX,
+  NEWBIE_ATTENDED_MIN,
+  type ApplicantDto,
   type ApplyBlockReason,
   type ExactPlaceDto,
   type LobbyAccess,
@@ -19,7 +21,7 @@ import {
 import { stationById } from '@masl/shared/metro';
 import { z } from 'zod';
 import type { GeoPoint } from '@masl/db';
-import type { LobbyCardRow, ViewerContext } from './lobby-queries.js';
+import type { ApplicantRow, LobbyCardRow, ViewerContext } from './lobby-queries.js';
 
 /**
  * Rows → DTOs. Every DTO is a new object with named fields; rows are never spread, so a column
@@ -148,4 +150,21 @@ export function toLobbyDetail(
   return access.access === 'public'
     ? { ...base, access: 'public' }
     : { ...base, access: access.access, exactPlace: access.exactPlace };
+}
+
+/** An application as the host sees it: public person data, karma and the newbie flag only. */
+export function toApplicant(row: ApplicantRow, minKarma: number | null): ApplicantDto {
+  return {
+    applicationId: row.id,
+    status: row.status,
+    appliedAt: row.appliedAt.toISOString(),
+    decidedAt: row.decidedAt?.toISOString() ?? null,
+    user: {
+      firstName: row.firstName,
+      photoUrl: row.photoUrl,
+      karma: row.karma,
+      isNewbie: row.attended < NEWBIE_ATTENDED_MIN,
+    },
+    meetsMinKarma: meetsMinKarma(row.karma, minKarma),
+  };
 }

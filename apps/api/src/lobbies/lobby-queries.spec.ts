@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { Database } from '@masl/db';
 import {
+  applicantsQuery,
   exactPlaceQuery,
   feedDaysQuery,
   feedPageQuery,
@@ -53,6 +54,7 @@ const publicBuilders: Record<string, () => { toSQL(): { sql: string; params: unk
   'my hosted past': () => hostedLobbiesQuery(db, VIEWER, NOW, 'past', 20),
   'my joined upcoming': () => joinedLobbiesQuery(db, VIEWER, NOW, 'upcoming', 100),
   'my joined past': () => joinedLobbiesQuery(db, VIEWER, NOW, 'past', 20),
+  'host applications': () => applicantsQuery(db, LOBBY),
 };
 
 describe('lobby queries (T-SQL-1)', () => {
@@ -60,7 +62,8 @@ describe('lobby queries (T-SQL-1)', () => {
     const { sql } = publicBuilders[name]!().toSQL();
     expect(sql).not.toMatch(EXACT_COLUMN);
     // The point it does use is the public one.
-    if (!['detail members', 'feed days'].includes(name)) expect(sql).toContain('"lobbies"."public_location"');
+    if (!['detail members', 'feed days', 'host applications'].includes(name))
+      expect(sql).toContain('"lobbies"."public_location"');
   });
 
   it('only loadExactPlace reads the exact columns', () => {

@@ -2,14 +2,16 @@ import {
   APPLICATIONS_PENDING_MAX,
   APPLICATIONS_PER_DAY_MAX,
   APPLY_BLOCK_REASONS,
+  applicantDto,
   lobbyCardDto,
   lobbyDetailDto,
 } from '@masl/shared';
 import { placeHint, stationById } from '@masl/shared/metro';
-import type { LobbyCardRow, ViewerContext } from './lobby-queries.js';
+import type { ApplicantRow, LobbyCardRow, ViewerContext } from './lobby-queries.js';
 import {
   applyBlock,
   parseCancelReason,
+  toApplicant,
   toLobbyCard,
   toLobbyDetail,
   toPublicPlace,
@@ -193,5 +195,38 @@ describe('cards and details', () => {
     const exactPlace = { address: 'ул. Тестовая, 1', point: { lat: 55.78, lng: 37.55 } };
     const memberDetail = toLobbyDetail(row(), viewer(), NOW, { access: 'member', exactPlace }, []);
     expect(lobbyDetailDto.parse(memberDetail)).toMatchObject({ access: 'member', exactPlace, members: [] });
+  });
+});
+
+describe('applicants', () => {
+  const row = (patch: Partial<ApplicantRow> = {}): ApplicantRow => ({
+    id: '00000000-0000-4000-8000-000000000009',
+    status: 'pending',
+    appliedAt: NOW,
+    decidedAt: null,
+    firstName: 'Борис',
+    photoUrl: null,
+    karma: 50,
+    attended: 0,
+    ...patch,
+  });
+
+  it('shows the public person data, the newbie flag and the threshold check only', () => {
+    const dto = toApplicant(row(), 50);
+    expect(applicantDto.parse(dto)).toEqual({
+      applicationId: '00000000-0000-4000-8000-000000000009',
+      status: 'pending',
+      appliedAt: NOW.toISOString(),
+      decidedAt: null,
+      user: { firstName: 'Борис', photoUrl: null, karma: 50, isNewbie: true },
+      meetsMinKarma: true,
+    });
+  });
+
+  it('is not a newbie after an attended meetup; the karma threshold is inclusive', () => {
+    expect(toApplicant(row({ attended: 1 }), null).user.isNewbie).toBe(false);
+    expect(toApplicant(row({ karma: 49 }), 50).meetsMinKarma).toBe(false);
+    expect(toApplicant(row({ karma: 0 }), null).meetsMinKarma).toBe(true);
+    expect(toApplicant(row({ status: 'approved', decidedAt: NOW }), null).decidedAt).toBe(NOW.toISOString());
   });
 });

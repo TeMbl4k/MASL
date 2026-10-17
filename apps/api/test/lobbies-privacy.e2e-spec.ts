@@ -1,7 +1,9 @@
-import { eq, sql } from 'drizzle-orm';
-import { geographyFrom, lobbies } from '@masl/db';
+import { and, eq, sql } from 'drizzle-orm';
+import { geographyFrom, lobbies, lobbyMembers } from '@masl/db';
 import {
+  cancelApplicationResponse,
   feedResponse,
+  hostApplicationsResponse,
   lobbyDetailDto,
   mapResponse,
   myLobbiesResponse,
@@ -253,6 +255,61 @@ describe.skipIf(!adminUrl)('lobby privacy e2e (requires TEST_DATABASE_URL)', () 
       expect(response.statusCode, url).toBeGreaterThanOrEqual(400);
       assertNoExactPlace(response.json(), url);
     }
+  });
+
+  it('T-PRIV-1 (applications): no exact place in the list, apply, cancel, decisions or their errors', async () => {
+    const { host, lobby, roles } = await lobbyWithRoles();
+    const send = (token: string, method: 'GET' | 'POST' | 'DELETE', path: string) =>
+      t.app.inject({ method, url: `/api/lobbies/${lobby.id}${path}`, headers: authHeader(token) });
+    const pendingId = (
+      await t.db
+        .select({ id: lobbyMembers.id })
+        .from(lobbyMembers)
+        .where(and(eq(lobbyMembers.lobbyId, lobby.id), eq(lobbyMembers.userId, roles.pending.user.id)))
+    )[0]!.id;
+
+    // The host's list carries applicants and the card, never the exact place.
+    const list = await send(host.token, 'GET', '/applications');
+    expect(list.statusCode).toBe(200);
+    const listed = hostApplicationsResponse.parse(list.json());
+    expect(listed.pending).toHaveLength(1);
+    assertNoExactPlace(listed, 'applications list');
+
+    // Refusals to everyone else, on every applications route.
+    for (const role of Object.values(roles)) {
+      for (const [method, path] of [
+        ['GET', '/applications'],
+        ['POST', `/applications/${pendingId}/approve`],
+        ['POST', `/applications/${pendingId}/reject`],
+      ] as const) {
+        const response = await send(role.token, method, path);
+        expect(response.statusCode, path).toBe(403);
+        assertNoExactPlace(response.json(), `${method} ${path}`);
+      }
+      const applied = await send(role.token, 'POST', '/applications');
+      expect(applied.statusCode).toBeLessThan(500);
+      // Only the approved member's idempotent repeat is a member detail.
+      if (role !== roles.approved) assertNoExactPlace(applied.json(), 'apply');
+    }
+    const outsider = await t.loginOnboarded();
+    const applied = await send(outsider.token, 'POST', '/applications');
+    expect(applied.statusCode).toBe(201);
+    assertNoExactPlace(applied.json(), 'apply response');
+    assertNoExactPlace((await send(outsider.token, 'DELETE', '/applications/me')).json(), 'withdraw');
+    assertNoExactPlace((await send(roles.rejected.token, 'DELETE', '/applications/me')).json(), '404');
+
+    // Approve and reject answer with the list; the approved member then sees the place.
+    const approved = await send(host.token, 'POST', `/applications/${pendingId}/approve`);
+    expect(approved.statusCode).toBe(200);
+    assertNoExactPlace(hostApplicationsResponse.parse(approved.json()), 'approve response');
+    expect((await detailBody(roles.pending.token, lobby.id)).access).toBe('member');
+
+    // Leaving takes it away again, in the cancel response itself.
+    const left = await send(roles.pending.token, 'DELETE', '/applications/me');
+    expect(left.statusCode).toBe(200);
+    const leftBody = cancelApplicationResponse.parse(left.json());
+    expect(leftBody.lobby.access).toBe('public');
+    assertNoExactPlace(leftBody, 'leave response');
   });
 
   const get = async (token: string, url: string) => {

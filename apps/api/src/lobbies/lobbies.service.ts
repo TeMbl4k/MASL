@@ -1,6 +1,6 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { lobbies, users, type Database, type GeoPoint } from '@masl/db';
+import { lobbies, type Database, type GeoPoint } from '@masl/db';
 import {
   HOSTED_UPCOMING_MAX,
   LOBBIES_PER_DAY_MAX,
@@ -24,6 +24,7 @@ import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
+import type { DbTransaction } from '../karma/karma.service.js';
 import { resolveLobbyAccess } from './lobby-access.js';
 import { toExactPlace, toLobbyDetail, toPerson, membershipOf, type DetailAccess } from './lobby.mapper.js';
 import {
@@ -32,6 +33,7 @@ import {
   loadLobbyForViewer,
   loadViewerContext,
   lockLobby,
+  lockUser,
   membersQuery,
   roundOrigin,
   type CreationCounters,
@@ -82,6 +84,11 @@ export interface DetailRequest {
   origin?: GeoPoint | null;
   /** Loaded once by the caller when it already has it. */
   viewer?: ViewerContext;
+  /**
+   * The viewer saw the lobby when the call started, so the public detail is no news to them:
+   * leaving a shadow-banned host's lobby hides it, yet the response still shows it.
+   */
+  keepVisible?: boolean;
 }
 
 @Injectable()
@@ -121,12 +128,7 @@ export class LobbiesService {
     const now = this.clock.now();
     return this.db.transaction(async (tx) => {
       // The user lock serializes this user's creates, so parallel ones can't all pass the limits.
-      const [locked] = await tx
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.id, userId))
-        .for('no key update');
-      if (!locked) throw new UnauthorizedException('Сессия недействительна или истекла');
+      await this.lockActor(tx, userId);
       const viewer = await this.viewer(tx, userId, now);
       if (!viewer.onboarded) throw apiError('not_onboarded');
       if (viewer.lobbyCreationBlocked) throw apiError('creation_blocked');
@@ -232,7 +234,14 @@ export class LobbiesService {
    * The lobby with the viewer's rights, or 404 `lobby_not_found` for a missing or hidden one:
    * both take the same query and give the same body.
    */
-  async visibleLobby(db: Executor, lobbyId: string, viewerId: string, now: Date, origin?: GeoPoint | null) {
+  async visibleLobby(
+    db: Executor,
+    lobbyId: string,
+    viewerId: string,
+    now: Date,
+    origin?: GeoPoint | null,
+    keepVisible = false,
+  ) {
     const row = await loadLobbyForViewer(db, lobbyId, viewerId, roundOrigin(origin));
     if (!row) throw apiError('lobby_not_found');
     const effectiveStatus = effectiveLobbyStatus(row, now);
@@ -243,7 +252,7 @@ export class LobbiesService {
       membership: membershipOf(row),
       effectiveStatus,
     });
-    if (!rights.visible) throw apiError('lobby_not_found');
+    if (!rights.visible && !keepVisible) throw apiError('lobby_not_found');
     return { row, rights, effectiveStatus };
   }
 
@@ -253,7 +262,14 @@ export class LobbiesService {
    */
   async detailFor(db: Executor, request: DetailRequest): Promise<LobbyDetailDto> {
     const { lobbyId, viewerId, now } = request;
-    const { row, rights } = await this.visibleLobby(db, lobbyId, viewerId, now, request.origin);
+    const { row, rights } = await this.visibleLobby(
+      db,
+      lobbyId,
+      viewerId,
+      now,
+      request.origin,
+      request.keepVisible,
+    );
     const viewer = request.viewer ?? (await this.viewer(db, viewerId, now));
 
     let access: DetailAccess = { access: 'public' };
@@ -264,6 +280,11 @@ export class LobbiesService {
     }
     const members = rights.canSeeMembers ? (await membersQuery(db, lobbyId)).map(toPerson) : null;
     return toLobbyDetail(row, viewer, now, access, members);
+  }
+
+  /** Locks the actor's user row, the first lock of every user mutation (spec §8). */
+  async lockActor(tx: DbTransaction, userId: string): Promise<void> {
+    if (!(await lockUser(tx, userId))) throw new UnauthorizedException('Сессия недействительна или истекла');
   }
 
   /** The viewer context of an authenticated user; a deleted user's session is void. */

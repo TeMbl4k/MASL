@@ -415,6 +415,12 @@ export function membersQuery(db: Executor, lobbyId: string) {
     .orderBy(asc(lobbyMembers.decidedAt), asc(lobbyMembers.id));
 }
 
+/** Locks the actor's user row, the first lock of every mutation (spec §8). False if gone. */
+export async function lockUser(tx: DbTransaction, userId: string): Promise<boolean> {
+  const rows = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('no key update');
+  return rows.length > 0;
+}
+
 /** Locks the lobby row for a mutation (lock order: user → lobby → membership). */
 export async function lockLobby(tx: DbTransaction, lobbyId: string): Promise<boolean> {
   const rows = await tx
@@ -532,3 +538,72 @@ export async function loadCreationCounters(
     upcoming: upcoming?.n ?? 0,
   };
 }
+
+/** Locks the user's own membership row in the lobby (after the user and lobby locks). */
+export async function lockOwnMembership(tx: DbTransaction, lobbyId: string, userId: string) {
+  const [row] = await tx
+    .select({ id: lobbyMembers.id, status: lobbyMembers.status, decidedAt: lobbyMembers.decidedAt })
+    .from(lobbyMembers)
+    .where(and(eq(lobbyMembers.lobbyId, lobbyId), eq(lobbyMembers.userId, userId)))
+    .for('no key update');
+  return row ?? null;
+}
+
+/**
+ * Whether the host sees this application: a shadow-banned applicant is hidden unless already
+ * taking a slot (spec §5.5, Q22). The list and the decisions share it, so neither reveals the ban.
+ */
+const visibleToHostSql = sql<boolean>`(${or(
+  not(users.isShadowBanned),
+  inArray(lobbyMembers.status, [...OCCUPYING_MEMBERSHIP_STATUSES]),
+)})`;
+
+/**
+ * Locks an application of this lobby for the host's decision (after the lobby lock). The
+ * applicant's karma and ban flag are read without locking the user: a lobby → user lock would
+ * close a cycle with apply (user → lobby). An id from another lobby finds nothing.
+ */
+export async function lockApplication(tx: DbTransaction, lobbyId: string, applicationId: string) {
+  const [row] = await tx
+    .select({
+      id: lobbyMembers.id,
+      status: lobbyMembers.status,
+      applicantKarma: users.karma,
+      visibleToHost: visibleToHostSql,
+    })
+    .from(lobbyMembers)
+    .innerJoin(users, eq(users.id, lobbyMembers.userId))
+    .where(and(eq(lobbyMembers.id, applicationId), eq(lobbyMembers.lobbyId, lobbyId)))
+    .for('no key update', { of: lobbyMembers });
+  return row ?? null;
+}
+
+const attendedCountSql =
+  sql<number>`(select count(*) from ${karmaEvents} where ${karmaEvents.userId} = ${users.id} and ${karmaEvents.reason} = 'attended')`.mapWith(
+    Number,
+  );
+
+/**
+ * The host's applications list: pending, occupying and rejected rows with the applicant's
+ * public data and attended count. Withdrawn and left rows are not listed, nor rows hidden
+ * from the host (`visibleToHostSql`).
+ */
+export function applicantsQuery(db: Executor, lobbyId: string) {
+  return db
+    .select({
+      id: lobbyMembers.id,
+      status: lobbyMembers.status,
+      appliedAt: lobbyMembers.appliedAt,
+      decidedAt: lobbyMembers.decidedAt,
+      firstName: users.firstName,
+      photoUrl: users.photoUrl,
+      karma: users.karma,
+      attended: attendedCountSql,
+    })
+    .from(lobbyMembers)
+    .innerJoin(users, eq(users.id, lobbyMembers.userId))
+    .where(and(eq(lobbyMembers.lobbyId, lobbyId), ne(lobbyMembers.status, 'cancelled'), visibleToHostSql))
+    .orderBy(asc(lobbyMembers.appliedAt), asc(lobbyMembers.id));
+}
+
+export type ApplicantRow = Awaited<ReturnType<typeof applicantsQuery>>[number];
