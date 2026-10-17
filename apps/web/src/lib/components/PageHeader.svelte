@@ -5,12 +5,14 @@
 
   interface Props {
     title: string;
+    /** Small caps line above the title, naming the screen («Заявки»). */
+    eyebrow?: string;
     subtitle?: string;
     /** Right side of the header: an action or a pill. */
     right?: Snippet;
   }
 
-  let { title, subtitle, right }: Props = $props();
+  let { title, eyebrow, subtitle, right }: Props = $props();
 </script>
 
 <header class="flex flex-col gap-3 px-5 pt-5">
@@ -27,6 +29,9 @@
   {/if}
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0 space-y-1">
+      {#if eyebrow}
+        <p class="text-xs tracking-[0.12em] text-gray-light uppercase">{eyebrow}</p>
+      {/if}
       <h1 tabindex="-1" class="text-3xl font-light tracking-tight break-words outline-none">{title}</h1>
       {#if subtitle}
         <p class="text-sm text-gray-light">{subtitle}</p>
