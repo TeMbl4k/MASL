@@ -15,6 +15,13 @@
       "when": 1792158607486,
       "tag": "0001_init_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792216958234,
+      "tag": "0002_lobby_public_place",
+      "breakpoints": true
     }
   ]
 }
