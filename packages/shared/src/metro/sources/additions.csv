@@ -1,0 +1,106 @@
+line_id;name_ru;lat;lng;source_url
+1;Фрунзенская;55.7267;37.5786;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+1;Филатов Луг;55.601367;37.407645;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+1;Прокшино;55.586242;37.433802;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+1;Ольховая;55.568643;37.459332;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+1;Новомосковская;55.560396;37.468220;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+1;Потапово;55.552640;37.492765;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+2;Ховрино;55.8791;37.4822;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+2;Беломорская;55.8658;37.4764;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Аэропорт Внуково;55.6067;37.2883;https://en.wikipedia.org/wiki/Aeroport_Vnukovo_(Moscow_Metro)
+8A;Пыхтино;55.625;37.298;https://en.wikipedia.org/wiki/Pykhtino_(Moscow_Metro)
+8A;Рассказовка;55.6339;37.3347;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Новопеределкино;55.6396;37.3552;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Боровское шоссе;55.6476;37.3701;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Солнцево;55.6493;37.3909;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Говорово;55.6595;37.4172;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Озёрная;55.6709;37.4491;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Мичуринский проспект;55.6896;37.4833;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Раменки;55.6975;37.4984;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Ломоносовский проспект;55.7069;37.5156;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+8A;Минская;55.7246;37.4970;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+10;Физтех;55.9226;37.5467;https://en.wikipedia.org/wiki/Fiztekh_(Moscow_Metro)
+10;Лианозово;55.8975;37.5445;https://en.wikipedia.org/wiki/Lianozovo_(Moscow_Metro)
+10;Яхромская;55.8798;37.5456;https://en.wikipedia.org/wiki/Yakhromskaya
+10;Селигерская;55.865000;37.548333;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+10;Верхние Лихоборы;55.855833;37.561111;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+10;Окружная;55.846000;37.574250;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+10;Петровско-Разумовская;55.8351;37.5745;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+10;Фонвизинская;55.8228;37.5881;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+10;Бутырская;55.8133;37.6028;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Савёловская;55.7934;37.5870;https://en.wikipedia.org/wiki/Savyolovskaya_(Bolshaya_Koltsevaya_line)
+11;Петровский парк;55.7925;37.5578;https://en.wikipedia.org/wiki/Petrovsky_Park_(Moscow_Metro)
+11;ЦСКА;55.7866;37.5333;https://en.wikipedia.org/wiki/CSKA_(Moscow_Metro)
+11;Народное Ополчение;55.7753;37.4844;https://en.wikipedia.org/wiki/Narodnoye_Opolcheniye_(Moscow_Metro)
+11;Мнёвники;55.7600;37.4708;https://en.wikipedia.org/wiki/Mnyovniki_(Moscow_Metro)
+11;Терехово;55.7492;37.4606;https://en.wikipedia.org/wiki/Terekhovo_(Moscow_Metro)
+11;Марьина Роща;55.798;37.618;https://en.wikipedia.org/wiki/Maryina_Roshcha_(Bolshaya_Koltsevaya_line)
+11;Сокольники;55.7903;37.679;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Электрозаводская;55.780292;37.703013;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Лефортово;55.764738;37.706747;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Авиамоторная;55.753670;37.719149;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Нижегородская;55.731748;37.730076;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Текстильщики;55.7084;37.7283;https://en.wikipedia.org/wiki/Tekstilshchiki_(Bolshaya_Koltsevaya_line)
+11;Печатники;55.694;37.727;https://en.wikipedia.org/wiki/Pechatniki_(Bolshaya_Koltsevaya_line)
+11;Нагатинский затон;55.6845;37.7050;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Кленовый бульвар;55.6755;37.6846;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Зюзино;55.6563;37.5721;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Воронцовская;55.6587;37.5399;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Новаторская;55.6701;37.5218;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Проспект Вернадского;55.6778;37.5050;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Мичуринский проспект;55.6884;37.4851;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Аминьевская;55.6972;37.4642;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Давыдково;55.7153;37.4517;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Хорошёвская;55.7766;37.5181;https://en.wikipedia.org/wiki/Khoroshyovskaya_(Moscow_Metro)
+11;Кунцевская;55.7307;37.4459;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+11;Рижская;55.7936;37.6362;https://en.wikipedia.org/wiki/List_of_Moscow_Metro_stations
+14;Окружная;55.8489;37.5711;https://en.wikipedia.org/wiki/Okruzhnaya_(Moscow_Central_Circle)
+14;Владыкино;55.8474;37.5926;https://en.wikipedia.org/wiki/Vladykino_(Moscow_Central_Circle)
+14;Ботанический сад;55.8456;37.6383;https://en.wikipedia.org/wiki/Botanichesky_Sad_(Moscow_Central_Circle)
+14;Ростокино;55.8395;37.6676;https://en.wikipedia.org/wiki/Rostokino_(Moscow_Central_Circle)
+14;Белокаменная;55.8298;37.7018;https://en.wikipedia.org/wiki/Belokamennaya_(Moscow_Central_Circle)
+14;Бульвар Рокоссовского;55.8172;37.7373;https://en.wikipedia.org/wiki/Bulvar_Rokossovskogo_(Moscow_Central_Circle)
+14;Локомотив;55.8039;37.7459;https://en.wikipedia.org/wiki/Lokomotiv_(Moscow_Central_Circle)
+14;Измайлово;55.7896;37.7434;https://en.wikipedia.org/wiki/Izmaylovo_(Moscow_Central_Circle)
+14;Соколиная Гора;55.7714;37.7451;https://en.wikipedia.org/wiki/Sokolinaya_Gora_(Moscow_Central_Circle)
+14;Шоссе Энтузиастов;55.7589;37.7463;https://en.wikipedia.org/wiki/Shosse_Entuziastov_(Moscow_Central_Circle)
+14;Андроновка;55.7473;37.7380;https://en.wikipedia.org/wiki/Andronovka_(Moscow_Central_Circle)
+14;Нижегородская;55.7321;37.7281;https://en.wikipedia.org/wiki/Nizhegorodskaya_(Moscow_Central_Circle)
+14;Новохохловская;55.7243;37.7173;https://en.wikipedia.org/wiki/Novokhokhlovskaya_(Moscow_Central_Circle)
+14;Дубровка;55.7127;37.6781;https://en.wikipedia.org/wiki/Dubrovka_(Moscow_Central_Circle)
+14;Автозаводская;55.7066;37.6636;https://en.wikipedia.org/wiki/Avtozavodskaya_(Moscow_Central_Circle)
+14;Угрешская;55.7185;37.6976;https://en.wikipedia.org/wiki/Ugreshskaya
+14;ЗИЛ;55.6978;37.6474;https://en.wikipedia.org/wiki/ZIL_(Moscow_Central_Circle)
+14;Лужники;55.7210;37.5605;https://en.wikipedia.org/wiki/Luzhniki_(Moscow_Central_Circle)
+14;Кутузовская;55.7396;37.5344;https://en.wikipedia.org/wiki/Kutuzovskaya_(Moscow_Central_Circle)
+14;Шелепиха;55.7564;37.5263;https://en.wikipedia.org/wiki/Shelepikha_(Moscow_Central_Circle)
+14;Хорошёво;55.7773;37.5071;https://en.wikipedia.org/wiki/Khoroshyovo_(Moscow_Central_Circle)
+14;Зорге;55.7878;37.5045;https://en.wikipedia.org/wiki/Zorge_(Moscow_Central_Circle)
+14;Стрешнево;55.8137;37.4870;https://en.wikipedia.org/wiki/Streshnevo_(Moscow_Central_Circle)
+14;Балтийская;55.8259;37.4965;https://en.wikipedia.org/wiki/Baltiyskaya_(Moscow_Central_Circle)
+14;Коптево;55.8397;37.5203;https://en.wikipedia.org/wiki/Koptevo_(Moscow_Central_Circle)
+14;Лихоборы;55.8472;37.5511;https://en.wikipedia.org/wiki/Likhobory_(Moscow_Central_Circle)
+14;Верхние Котлы;55.6902;37.6193;https://en.wikipedia.org/wiki/Verkhniye_Kotly
+14;Панфиловская;55.7991;37.4988;https://en.wikipedia.org/wiki/Panfilovskaya
+14;Площадь Гагарина;55.7071;37.5858;https://en.wikipedia.org/wiki/Ploshchad_Gagarina
+14;Крымская;55.689863;37.607424;https://en.wikipedia.org/wiki/Krymskaya_(Troitskaya_line)
+14;Москва-Сити;55.7476;37.5320;https://en.wikipedia.org/wiki/Moskva-City_(Moscow_Central_Circle)
+15;Нижегородская;55.732500;37.728611;https://en.wikipedia.org/wiki/Nizhegorodskaya_(Moscow_Metro)
+15;Стахановская;55.725000;37.761944;https://en.wikipedia.org/wiki/Stakhanovskaya
+15;Окская;55.718611;37.781666;https://en.wikipedia.org/wiki/Okskaya
+15;Юго-Восточная;55.705000;37.818055;https://en.wikipedia.org/wiki/Yugo-Vostochnaya_(Moscow_Metro)
+15;Косино;55.704166;37.847777;https://en.wikipedia.org/wiki/Kosino_(Moscow_Metro)
+15;Улица Дмитриевского;55.710000;37.879166;https://en.wikipedia.org/wiki/Ulitsa_Dmitriyevskogo
+15;Лухмановская;55.7085;37.9004;https://en.wikipedia.org/wiki/Lukhmanovskaya
+15;Некрасовка;55.703611;37.926388;https://en.wikipedia.org/wiki/Nekrasovka_(Moscow_Metro)
+16;Вавиловская;55.686688;37.543706;https://en.wikipedia.org/wiki/Vavilovskaya_(Moscow_Metro)
+16;Академическая;55.687525;37.574251;https://en.wikipedia.org/wiki/Akademicheskaya_(Troitskaya_line)
+16;Новаторская;55.671516;37.521331;https://en.wikipedia.org/wiki/Novatorskaya_(Troitskaya_line)
+16;Университет Дружбы Народов;55.64871;37.50813;https://en.wikipedia.org/wiki/Universitet_Druzhby_Narodov_(Moscow_Metro)
+16;ЗИЛ;55.699332;37.649621;https://en.wikipedia.org/wiki/ZIL_(Troitskaya_line)
+16;Крымская;55.689863;37.607424;https://en.wikipedia.org/wiki/Krymskaya_(Troitskaya_line)
+16;Генерала Тюленева;55.626239;37.485850;https://en.wikipedia.org/wiki/Generala_Tyuleneva_(Moscow_Metro)
+16;Тютчевская;55.61909;37.48103;https://en.wikipedia.org/wiki/Tyutchevskaya_(Moscow_Metro)
+16;Корниловская;55.5984;37.4790;https://en.wikipedia.org/wiki/Kornilovskaya_(Moscow_Metro)
+16;Коммунарка;55.57464;37.46798;https://en.wikipedia.org/wiki/Kommunarka_(Moscow_Metro)
+16;Новомосковская;55.5606;37.4653;https://en.wikipedia.org/wiki/Novomoskovskaya_(Troitskaya_line)

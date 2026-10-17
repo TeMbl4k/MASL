@@ -9,13 +9,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./metro": {
+      "types": "./dist/metro/index.d.ts",
+      "default": "./dist/metro/index.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "metro:build": "node scripts/build-metro.mjs"
   },
   "dependencies": {
     "zod": "^4.6.7"
