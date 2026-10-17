@@ -69,11 +69,25 @@ export function darkenStyle(style: StyleSpecification): StyleSpecification {
   };
 }
 
-/** Switches to the darkened fallback style when the main style fails to load. */
-export function attachStyleFallback(map: MapLibreMap): void {
+/**
+ * Switches to the darkened fallback style when the main style fails to load, and calls `onfail`
+ * when the fallback fails too. Only errors before a style has loaded count: later ones come from
+ * tiles, sprites or glyphs and leave the map usable (`isStyleLoaded()` is false while tiles load).
+ */
+export function attachStyleFallback(map: MapLibreMap, onfail?: () => void): void {
+  let loaded = false;
   let switched = false;
+  let failed = false;
+  map.on('style.load', () => {
+    loaded = true;
+  });
   map.on('error', () => {
-    if (switched || map.isStyleLoaded()) return;
+    if (loaded || failed) return;
+    if (switched) {
+      failed = true;
+      onfail?.();
+      return;
+    }
     switched = true;
     map.setStyle(MAP_STYLE_FALLBACK_URL, { transformStyle: (_previous, next) => darkenStyle(next) });
   });
