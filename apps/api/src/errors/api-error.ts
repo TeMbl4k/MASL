@@ -1,0 +1,121 @@
+import { HttpException, HttpStatus } from '@nestjs/common';
+import {
+  APPLICATIONS_PENDING_MAX,
+  formatRetryAfter,
+  HOSTED_UPCOMING_MAX,
+  LOBBIES_PER_DAY_MAX,
+  PLACE_TOO_FAR_MESSAGE,
+  START_ISSUE_MESSAGES,
+  type ApiErrorCode,
+  type ApiErrorDto,
+} from '@masl/shared';
+
+/** Codes whose message needs data; every other code has a constant message. */
+interface ApiErrorParams {
+  daily_limit: { newbie: boolean; retryAt: Date; now: Date };
+  karma_too_low: { minKarma: number; karma: number };
+}
+
+type ParamsArg<C extends ApiErrorCode> = C extends keyof ApiErrorParams ? [params: ApiErrorParams[C]] : [];
+
+type MessageMap = {
+  [C in ApiErrorCode]: C extends keyof ApiErrorParams ? (params: ApiErrorParams[C]) => string : string;
+};
+
+export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, HttpStatus>> = {
+  not_onboarded: HttpStatus.FORBIDDEN,
+  creation_blocked: HttpStatus.FORBIDDEN,
+  daily_limit: HttpStatus.TOO_MANY_REQUESTS,
+  upcoming_limit: HttpStatus.TOO_MANY_REQUESTS,
+  starts_too_soon: HttpStatus.BAD_REQUEST,
+  starts_too_far: HttpStatus.BAD_REQUEST,
+  place_too_far: HttpStatus.BAD_REQUEST,
+  lobby_not_found: HttpStatus.NOT_FOUND,
+  not_host: HttpStatus.FORBIDDEN,
+  lobby_cancelled: HttpStatus.CONFLICT,
+  lobby_closed: HttpStatus.CONFLICT,
+  lobby_started: HttpStatus.CONFLICT,
+  lobby_full: HttpStatus.CONFLICT,
+  karma_too_low: HttpStatus.FORBIDDEN,
+  own_lobby: HttpStatus.CONFLICT,
+  application_rejected: HttpStatus.CONFLICT,
+  application_left: HttpStatus.CONFLICT,
+  pending_limit: HttpStatus.TOO_MANY_REQUESTS,
+  applications_daily_limit: HttpStatus.TOO_MANY_REQUESTS,
+  application_not_found: HttpStatus.NOT_FOUND,
+  application_not_pending: HttpStatus.CONFLICT,
+  applicant_karma_too_low: HttpStatus.CONFLICT,
+  invalid_cursor: HttpStatus.BAD_REQUEST,
+  rate_limited: HttpStatus.TOO_MANY_REQUESTS,
+  conflict: HttpStatus.CONFLICT,
+  invalid_data: HttpStatus.BAD_REQUEST,
+  retry: HttpStatus.CONFLICT,
+  internal_error: HttpStatus.INTERNAL_SERVER_ERROR,
+};
+
+/**
+ * The single Russian message of each code. Messages never carry an address, coordinates or
+ * another user's data; only the viewer's own karma and limits.
+ */
+const MESSAGES: MessageMap = {
+  not_onboarded: 'Сначала заполните профиль',
+  creation_blocked: 'Создание встреч приостановлено. Обжаловать можно будет позже',
+  daily_limit: ({ newbie, retryAt, now }) =>
+    newbie
+      ? `Новичкам доступна одна встреча в сутки. Следующую можно создать ${formatRetryAfter(retryAt, now)}`
+      : `Можно создавать не больше ${LOBBIES_PER_DAY_MAX} встреч в сутки. Следующую — ${formatRetryAfter(retryAt, now)}`,
+  upcoming_limit: `У вас уже ${HOSTED_UPCOMING_MAX} предстоящих встреч. Дождитесь их или отмените одну`,
+  starts_too_soon: START_ISSUE_MESSAGES.starts_too_soon,
+  starts_too_far: START_ISSUE_MESSAGES.starts_too_far,
+  place_too_far: PLACE_TOO_FAR_MESSAGE,
+  lobby_not_found: 'Встреча не найдена',
+  not_host: 'Управлять встречей может только хост',
+  lobby_cancelled: 'Встреча отменена',
+  lobby_closed: 'Набор на встречу закрыт',
+  lobby_started: 'Встреча уже началась',
+  lobby_full: 'Все места заняты',
+  karma_too_low: ({ minKarma, karma }) => `Нужна карма от ${minKarma}. У вас ${karma}`,
+  own_lobby: 'Это ваша встреча',
+  application_rejected: 'Хост уже отклонил вашу заявку',
+  application_left: 'Вы отменили участие — подать заявку снова нельзя',
+  pending_limit: `У вас уже ${APPLICATIONS_PENDING_MAX} заявок на рассмотрении. Дождитесь ответов или отмените лишние`,
+  applications_daily_limit: 'Слишком много заявок за сутки. Попробуйте завтра',
+  application_not_found: 'Заявка не найдена',
+  application_not_pending: 'Заявка уже рассмотрена или отменена',
+  applicant_karma_too_low: 'Карма участника ниже порога встречи',
+  invalid_cursor: 'Список устарел — обновите ленту',
+  rate_limited: 'Слишком много запросов. Подождите немного',
+  conflict: 'Данные изменились, попробуйте ещё раз',
+  invalid_data: 'Некорректные данные',
+  retry: 'Попробуйте ещё раз',
+  internal_error: 'Внутренняя ошибка сервера',
+};
+
+/** Input field each validation-like code points at, for the form to highlight. */
+const ISSUE_PATHS: Partial<Record<ApiErrorCode, string>> = {
+  starts_too_soon: 'startsAt',
+  starts_too_far: 'startsAt',
+  place_too_far: 'location',
+};
+
+/** An HttpException whose response is an `apiErrorDto` body. */
+export class ApiException extends HttpException {
+  constructor(readonly body: ApiErrorDto) {
+    super(body, body.statusCode);
+  }
+}
+
+/** The only way the API builds an error body with a `code`. */
+export function apiError<C extends ApiErrorCode>(code: C, ...[params]: ParamsArg<C>): ApiException {
+  const entry = MESSAGES[code] as string | ((p: NonNullable<typeof params>) => string);
+  const message = typeof entry === 'function' ? entry(params!) : entry;
+  const body: ApiErrorDto = { statusCode: API_ERROR_STATUS[code], code, message };
+  if (code === 'daily_limit') {
+    body.retryAt = (params as ApiErrorParams['daily_limit']).retryAt.toISOString();
+  }
+  const path = ISSUE_PATHS[code];
+  if (path) {
+    body.issues = [{ path, message }];
+  }
+  return new ApiException(body);
+}
