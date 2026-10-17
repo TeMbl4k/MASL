@@ -4,6 +4,7 @@ import { userInterests, users, type Database, type User } from '@masl/db';
 import type { MeDto, OnboardingInput } from '@masl/shared';
 import type { TelegramIdentity } from '../auth/init-data.service.js';
 import { DB } from '../db/db.module.js';
+import { apiError } from '../errors/api-error.js';
 
 @Injectable()
 export class UsersService {
@@ -55,6 +56,17 @@ export class UsersService {
       throw new NotFoundException('Пользователь не найден');
     }
     return this.toMeDto(user, await this.interestsOf(userId));
+  }
+
+  /** 403 `not_onboarded` unless the user finished onboarding; the flag is read fresh from the DB. */
+  async requireOnboarded(userId: string): Promise<void> {
+    const [user] = await this.db
+      .select({ onboardedAt: users.onboardedAt })
+      .from(users)
+      .where(eq(users.id, userId));
+    if (!user?.onboardedAt) {
+      throw apiError('not_onboarded');
+    }
   }
 
   async completeOnboarding(userId: string, input: OnboardingInput, now: Date = new Date()): Promise<MeDto> {
