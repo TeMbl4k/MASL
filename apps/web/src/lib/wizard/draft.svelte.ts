@@ -44,6 +44,8 @@ export class LobbyDraft implements DraftValues {
   addressTouched = $state(false);
   /** Station picked in the no-map fallback (the point is then the station's or a suggestion's). */
   fallbackStationId = $state<string | null>(null);
+  /** Point of the last picked address suggestion, until the address is edited by hand. */
+  suggestionPoint = $state<GeoPointDto | null>(null);
   slots = $state(LOBBY_DEFAULT_SLOTS);
   minKarmaOn = $state(false);
   minKarma = $state<number>(LOBBY_MIN_KARMA_PRESETS[0]);
@@ -118,6 +120,7 @@ export class LobbyDraft implements DraftValues {
     this.address = '';
     this.addressTouched = false;
     this.fallbackStationId = null;
+    this.suggestionPoint = null;
     this.slots = LOBBY_DEFAULT_SLOTS;
     this.minKarmaOn = false;
     this.minKarma = LOBBY_MIN_KARMA_PRESETS[0];

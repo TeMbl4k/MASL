@@ -260,7 +260,7 @@
   {:else if draft.step === 2}
     <WizardFrame step={2}>
       {#snippet heading()}Когда <span class="font-semibold italic">и где</span>{/snippet}
-      <StepWhenWhere {draft} issues={shownIssues} />
+      <StepWhenWhere {draft} issues={shownIssues} addressSuggest={context?.addressSuggest ?? false} />
     </WizardFrame>
   {:else}
     <WizardFrame step={3}>
