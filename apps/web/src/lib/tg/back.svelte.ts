@@ -22,7 +22,10 @@ class BackController {
 
   /** The native BackButton is in use, so pages don't render their own. */
   get native(): boolean {
-    return session.inTelegram && backButtonMounted.current;
+    // Read the signal first: `inTelegram` is not reactive, and a reader that skipped the signal
+    // while it was still false would never re-run once the button is mounted.
+    const mounted = backButtonMounted.current;
+    return mounted && session.inTelegram;
   }
 
   /** Back is offered on this page: a nested route, an open sheet or a screen handler. */
