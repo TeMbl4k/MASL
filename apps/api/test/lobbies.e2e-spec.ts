@@ -16,8 +16,11 @@ import {
   adminUrl,
   authHeader,
   bootApp,
+  insertLobby,
   lobbyInput,
+  setMembership,
   setUser,
+  shiftLobby,
   type TestApp,
 } from './helpers.js';
 
@@ -344,6 +347,103 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
 
     it('401 without a token', async () => {
       const response = await t.app.inject({ method: 'GET', url: '/api/lobbies/creation-context' });
+      expect(response.statusCode).toBe(401);
+    });
+  });
+
+  describe('GET /lobbies/:id', () => {
+    const detail = (token: string, id: string, query = '') =>
+      t.app.inject({ method: 'GET', url: `/api/lobbies/${id}${query}`, headers: authHeader(token) });
+
+    it('shows the effective status without the sweeper (T-STATE-1)', async () => {
+      const host = await t.loginOnboarded();
+      const viewer = await t.loginOnboarded();
+      const lobby = await insertLobby(t.db, { hostId: host.user.id });
+      expect((await detail(viewer.token, lobby.id)).json()).toMatchObject({
+        status: 'open',
+        viewer: { applyBlock: null },
+      });
+
+      await shiftLobby(t.db, lobby.id, { startsInMin: -5, durationMin: 60 });
+      expect((await detail(viewer.token, lobby.id)).json()).toMatchObject({
+        status: 'active',
+        viewer: { applyBlock: 'not_open' },
+      });
+      await shiftLobby(t.db, lobby.id, { startsInMin: -120, durationMin: 60 });
+      expect((await detail(viewer.token, lobby.id)).json()).toMatchObject({ status: 'finished' });
+      // The stored status is still the cache the sweeper hasn't moved.
+      const [row] = await t.db
+        .select({ status: lobbies.status })
+        .from(lobbies)
+        .where(eq(lobbies.id, lobby.id));
+      expect(row!.status).toBe('open');
+    });
+
+    it('cancelled lobbies stay viewable with the reason', async () => {
+      const host = await t.loginOnboarded();
+      const viewer = await t.loginOnboarded();
+      const lobby = await insertLobby(t.db, { hostId: host.user.id, status: 'cancelled' });
+      await t.db.update(lobbies).set({ cancelComment: 'Заболел' }).where(eq(lobbies.id, lobby.id));
+      const response = await detail(viewer.token, lobby.id);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        status: 'cancelled',
+        cancelReason: 'other',
+        cancelComment: 'Заболел',
+        access: 'public',
+        viewer: { applyBlock: 'not_open' },
+      });
+    });
+
+    it('reports the viewer’s own state on the card', async () => {
+      const host = await t.loginOnboarded();
+      const viewer = await t.loginOnboarded();
+      const lobby = await insertLobby(t.db, { hostId: host.user.id, minKarma: 60, slots: 1 });
+      expect((await detail(viewer.token, lobby.id)).json().viewer.applyBlock).toBe('karma');
+      const full = await insertLobby(t.db, { hostId: host.user.id, slots: 1 });
+      const other = await t.loginOnboarded();
+      await setMembership(t.db, full.id, other.user.id, 'approved');
+      expect((await detail(viewer.token, full.id)).json()).toMatchObject({
+        approvedCount: 1,
+        viewer: { applyBlock: 'full' },
+      });
+      expect((await detail(other.token, full.id)).json()).toMatchObject({
+        access: 'member',
+        viewer: { membershipStatus: 'approved', applyBlock: null },
+      });
+      const notOnboarded = await t.login();
+      expect((await detail(notOnboarded.token, lobby.id)).json().viewer.applyBlock).toBe('not_onboarded');
+    });
+
+    it('404 for an unknown id; 400 for a malformed id or origin (T-VAL-1)', async () => {
+      const viewer = await t.loginOnboarded();
+      const missing = await detail(viewer.token, crypto.randomUUID());
+      expect(missing.statusCode).toBe(404);
+      expect(missing.json()).toEqual({
+        statusCode: 404,
+        code: 'lobby_not_found',
+        message: 'Встреча не найдена',
+      });
+
+      const host = await t.loginOnboarded();
+      const lobby = await insertLobby(t.db, { hostId: host.user.id });
+      for (const [id, query] of [
+        ['..%2Fme', ''],
+        ['42', ''],
+        [lobby.id, '?lat=55.75'],
+        [lobby.id, '?lat=NaN&lng=37.6'],
+        [lobby.id, '?lat=55.75&lng=37.6&lat=55.76'],
+        [lobby.id, '?lat=59.94&lng=30.31'],
+      ] as const) {
+        const response = await detail(viewer.token, id, query);
+        expect(response.statusCode, `${id}${query}`).toBe(400);
+      }
+      // Empty coordinates are a missing origin.
+      expect((await detail(viewer.token, lobby.id, '?lat=&lng=')).json().distanceM).toBeNull();
+    });
+
+    it('401 without a token', async () => {
+      const response = await t.app.inject({ method: 'GET', url: `/api/lobbies/${crypto.randomUUID()}` });
       expect(response.statusCode).toBe(401);
     });
   });

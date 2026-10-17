@@ -1,12 +1,16 @@
-import { Body, Controller, Get, Inject, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import {
   createLobbyInput,
   creationContextDto,
+  idParam,
   lobbyDetailDto,
+  lobbyDetailQuery,
   type CreateLobbyInput,
   type CreationContextDto,
   type LobbyDetailDto,
+  type LobbyDetailQuery,
 } from '@masl/shared';
+import type { GeoPoint } from '@masl/db';
 import type { FastifyReply } from 'fastify';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ResponseSchema } from '../contracts/response-schema.decorator.js';
@@ -41,4 +45,21 @@ export class LobbiesController {
     reply.status(created ? 201 : 200);
     return lobby;
   }
+
+  /** The lobby as the caller may see it; 404 for a missing or hidden one. */
+  @Get(':id')
+  @RateLimit('lobbyRead')
+  @ResponseSchema(lobbyDetailDto)
+  detail(
+    @CurrentUserId() userId: string,
+    @Param('id', new ZodValidationPipe(idParam)) id: string,
+    @Query(new ZodValidationPipe(lobbyDetailQuery)) query: LobbyDetailQuery,
+  ): Promise<LobbyDetailDto> {
+    return this.lobbies.detail(userId, id, originOf(query));
+  }
+}
+
+/** The viewer origin of a query; the schema already rounded it and requires both or neither. */
+export function originOf(query: { lat?: number; lng?: number }): GeoPoint | null {
+  return query.lat !== undefined && query.lng !== undefined ? { lat: query.lat, lng: query.lng } : null;
 }

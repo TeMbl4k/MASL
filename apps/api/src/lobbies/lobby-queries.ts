@@ -15,6 +15,7 @@ import {
   HOUR_MS,
   LOBBY_CREATE_WINDOW_HOURS,
   OCCUPYING_MEMBERSHIP_STATUSES,
+  roundViewerCoord,
   type LobbyCategory,
 } from '@masl/shared';
 import type { DbTransaction } from '../karma/karma.service.js';
@@ -33,6 +34,11 @@ export type Executor = Database | DbTransaction;
  * outside a column context, so it goes as ISO text with an explicit cast.
  */
 export const at = (instant: Date): SQL => sql`${instant.toISOString()}::timestamptz`;
+
+/** The viewer origin rounded to VIEWER_COORD_DECIMALS (the query schema rounds too). */
+export function roundOrigin(origin: GeoPoint | null | undefined): GeoPoint | null {
+  return origin ? { lat: roundViewerCoord(origin.lat), lng: roundViewerCoord(origin.lng) } : null;
+}
 
 /** The lobby's host; aliased so subqueries can use `users` unqualified. */
 export const hostUser = alias(users, 'host');

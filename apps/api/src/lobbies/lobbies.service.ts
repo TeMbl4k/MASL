@@ -31,6 +31,7 @@ import {
   loadLobbyForViewer,
   loadViewerContext,
   membersQuery,
+  roundOrigin,
   type CreationCounters,
   type Executor,
   type ViewerContext,
@@ -194,13 +195,17 @@ export class LobbiesService {
     });
   }
 
+  async detail(viewerId: string, lobbyId: string, origin: GeoPoint | null): Promise<LobbyDetailDto> {
+    return this.detailFor(this.db, { lobbyId, viewerId, now: this.clock.now(), origin });
+  }
+
   /**
    * The detail as the viewer may see it, or 404 `lobby_not_found` for a missing or hidden lobby
    * (the same query and the same body). Exact place and members are loaded only when allowed.
    */
   async detailFor(db: Executor, request: DetailRequest): Promise<LobbyDetailDto> {
     const { lobbyId, viewerId, now } = request;
-    const row = await loadLobbyForViewer(db, lobbyId, viewerId, request.origin ?? null);
+    const row = await loadLobbyForViewer(db, lobbyId, viewerId, roundOrigin(request.origin));
     if (!row) throw apiError('lobby_not_found');
     const rights = resolveLobbyAccess({
       viewerId,
