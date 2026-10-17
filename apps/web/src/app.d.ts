@@ -5,7 +5,12 @@ declare global {
     // interface Error {}
     // interface Locals {}
     // interface PageData {}
-    // interface PageState {}
+    /** Shallow-routing state: an open sheet is a history entry, so Back closes it. */
+    interface PageState {
+      sheet?: 'origin' | 'station' | 'map-place' | 'cancel-lobby' | 'interests';
+      /** Station id of the open `map-place` sheet. */
+      placeKey?: string;
+    }
     // interface Platform {}
   }
 }
