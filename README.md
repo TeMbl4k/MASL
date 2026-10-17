@@ -77,12 +77,28 @@ drizzle-kit берёт пользовательский тип в кавычки
 
 ## API
 
-Все маршруты API живут под `/api`, остальное отдаёт Mini App (один домен, без CORS).
+Все маршруты API живут под `/api`, остальное отдаёт Mini App (один домен, без CORS). Кроме `/api/health`, `/api/auth/telegram` и `/api/interests`, все требуют сессию (`Authorization: Bearer`). Запросы и ответы описаны zod-схемами в `packages/shared/src/schemas.ts`; ошибки — `{ statusCode, code, message }` с русским `message` (у ошибок валидации — `{ message, issues }` без `code`).
 
-| Метод | Путь                 | Что делает                                                    |
-| ----- | -------------------- | ------------------------------------------------------------- |
-| POST  | `/api/auth/telegram` | `{ initData }` → проверка подписи, создание пользователя, JWT |
-| GET   | `/api/me`            | Профиль текущего пользователя (Bearer)                        |
-| PUT   | `/api/me/onboarding` | Пол, возраст, 3–5 интересов (Bearer)                          |
-| GET   | `/api/interests`     | Облако интересов                                              |
-| GET   | `/api/health`        | Проверка API и базы                                           |
+| Метод  | Путь                                                   | Что делает                                                                     |
+| ------ | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| POST   | `/api/auth/telegram`                                   | `{ initData }` → проверка подписи, создание пользователя, JWT                  |
+| GET    | `/api/health`                                          | Проверка API и базы                                                            |
+| GET    | `/api/interests`                                       | Облако интересов                                                               |
+| GET    | `/api/me`                                              | Профиль текущего пользователя                                                  |
+| PUT    | `/api/me/onboarding`                                   | Пол, возраст, 3–5 интересов                                                    |
+| PUT    | `/api/me/interests`                                    | Сменить интересы (3–5)                                                         |
+| GET    | `/api/me/lobbies`                                      | «Мои события»: организую и участвую, предстоящие и прошедшие, счётчики         |
+| GET    | `/api/me/karma-events`                                 | Последние 20 изменений кармы                                                   |
+| GET    | `/api/lobbies/feed`                                    | Лента «Для вас»: фильтры категории и дня, точка отсчёта, курсор, счётчики дней |
+| GET    | `/api/lobbies/map`                                     | Встречи по станциям метро для карты (до 300)                                   |
+| GET    | `/api/lobbies/creation-context`                        | Можно ли создать встречу сейчас (лимиты, когда снова) и есть ли подсказки      |
+| POST   | `/api/lobbies`                                         | Создать встречу (идемпотентно по `requestId`)                                  |
+| GET    | `/api/lobbies/:id`                                     | Карточка встречи; точное место — только хосту и одобренным участникам          |
+| POST   | `/api/lobbies/:id/cancel`                              | Хост отменяет встречу до начала, с причиной                                    |
+| POST   | `/api/lobbies/:id/applications`                        | Подать заявку                                                                  |
+| DELETE | `/api/lobbies/:id/applications/me`                     | Отозвать свою заявку или выйти из участников (поздний выход −15 кармы)         |
+| GET    | `/api/lobbies/:id/applications`                        | Хост: список заявок и участников                                               |
+| POST   | `/api/lobbies/:id/applications/:applicationId/approve` | Хост одобряет заявку                                                           |
+| POST   | `/api/lobbies/:id/applications/:applicationId/reject`  | Хост отклоняет заявку                                                          |
+| GET    | `/api/places/suggest`                                  | Подсказки адресов DaData (если задан `DADATA_API_KEY`)                         |
+| GET    | `/api/places/reverse`                                  | Адрес по точке на карте через DaData                                           |
