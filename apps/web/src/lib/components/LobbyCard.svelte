@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatMoscowTime, LOBBY_CATEGORY_INFO, type LobbyCardDto } from '@masl/shared';
   import type { Snippet } from 'svelte';
-  import { formatLobbyStart } from '#lib/format/datetime.js';
+  import { formatLobbyDay, formatLobbyStart, relativeDayName } from '#lib/format/datetime.js';
   import { formatDistance } from '#lib/format/distance.js';
   import { formatSeats } from '#lib/format/labels.js';
   import { minKarmaMet } from '#lib/lobby-card.js';
@@ -39,6 +39,12 @@
   const karmaMet = $derived(minKarmaMet(lobby, viewerKarma));
   const featured = $derived(variant === 'featured');
   const time = $derived(formatMoscowTime(lobby.startsAt));
+  /** Compact rows show only the time in the square, so another day is named in the subtitle. */
+  const otherDay = $derived(
+    relativeDayName(lobby.startsAt, clock.now) === 'Сегодня'
+      ? null
+      : formatLobbyDay(lobby.startsAt, clock.now),
+  );
 </script>
 
 {#snippet place()}
@@ -65,6 +71,7 @@
       <span class="min-w-0 flex-1">
         <span class="block truncate text-[0.9375rem] font-semibold">{lobby.title}</span>
         <span class="block truncate text-[0.8125rem] text-gray-light">
+          {#if otherDay}{otherDay} ·{/if}
           {category.title} · {seats.toLowerCase()}
         </span>
       </span>

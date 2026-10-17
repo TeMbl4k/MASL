@@ -3,6 +3,7 @@ import {
   dayChips,
   formatCountdown,
   formatDuration,
+  formatLobbyDay,
   formatLobbyStart,
   formatLobbyWhen,
   formatShortDate,
@@ -35,6 +36,12 @@ describe('Moscow day boundaries', () => {
     expect(formatLobbyStart('2026-10-16T20:45:00Z', NOW)).toBe('Сегодня, 23:45');
     expect(formatLobbyStart('2026-10-16T21:30:00Z', NOW)).toBe('Завтра, 00:30');
     expect(formatLobbyStart('2026-10-18T16:30:00Z', NOW)).toBe('Вс, 18 окт., 19:30');
+  });
+
+  it('names the day of a start for compact rows', () => {
+    expect(formatLobbyDay('2026-10-16T20:45:00Z', NOW)).toBe('Сегодня');
+    expect(formatLobbyDay('2026-10-16T21:30:00Z', NOW)).toBe('Завтра');
+    expect(formatLobbyDay('2026-10-18T16:30:00Z', NOW)).toBe('Вс, 18 окт.');
   });
 
   it('formats the lobby page range', () => {

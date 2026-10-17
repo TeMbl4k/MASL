@@ -27,12 +27,17 @@ export function relativeDayName(instant: Instant, now: Instant): 'Сегодня
   return null;
 }
 
+/** Day of a start: «Сегодня», «Завтра», «Пт, 17 окт.». */
+export function formatLobbyDay(startsAt: Instant, now: Instant): string {
+  return (
+    relativeDayName(startsAt, now) ??
+    capitalize(formatMoscow(startsAt, { weekday: 'short', day: 'numeric', month: 'short' }))
+  );
+}
+
 /** Card time: «Сегодня, 19:30», «Завтра, 10:00», «Пт, 17 окт., 19:30». */
 export function formatLobbyStart(startsAt: Instant, now: Instant): string {
-  const time = formatMoscowTime(startsAt);
-  const relative = relativeDayName(startsAt, now);
-  if (relative) return `${relative}, ${time}`;
-  return `${capitalize(formatMoscow(startsAt, { weekday: 'short', day: 'numeric', month: 'short' }))}, ${time}`;
+  return `${formatLobbyDay(startsAt, now)}, ${formatMoscowTime(startsAt)}`;
 }
 
 /** Lobby page time: «Завтра, пт 17 октября · 19:30–21:30», «Вс, 18 октября · 20:00–22:00». */
