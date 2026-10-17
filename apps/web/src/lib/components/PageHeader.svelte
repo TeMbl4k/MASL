@@ -7,12 +7,14 @@
     title: string;
     /** Small caps line above the title, naming the screen («Заявки»). */
     eyebrow?: string;
+    /** Rich <h1> content («Мои <em>события</em>»); `title` is shown when it is absent. */
+    heading?: Snippet;
     subtitle?: string;
     /** Right side of the header: an action or a pill. */
     right?: Snippet;
   }
 
-  let { title, eyebrow, subtitle, right }: Props = $props();
+  let { title, eyebrow, heading, subtitle, right }: Props = $props();
 </script>
 
 <header class="flex flex-col gap-3 px-5 pt-5">
@@ -32,7 +34,9 @@
       {#if eyebrow}
         <p class="text-xs tracking-[0.12em] text-gray-light uppercase">{eyebrow}</p>
       {/if}
-      <h1 tabindex="-1" class="text-3xl font-light tracking-tight break-words outline-none">{title}</h1>
+      <h1 tabindex="-1" class="text-3xl font-light tracking-tight break-words outline-none">
+        {#if heading}{@render heading()}{:else}{title}{/if}
+      </h1>
       {#if subtitle}
         <p class="text-sm text-gray-light">{subtitle}</p>
       {/if}
