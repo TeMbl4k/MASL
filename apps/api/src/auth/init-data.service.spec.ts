@@ -19,7 +19,7 @@ const ivan = {
 };
 
 describe('InitDataService', () => {
-  it('принимает initData, подписанную токеном бота', () => {
+  it('accepts initData signed with the bot token', () => {
     const authDate = new Date(Math.floor(Date.now() / 1000) * 1000 - 60_000);
     expect(service.verify(signInitData(BOT_TOKEN, ivan, { authDate }))).toEqual({
       telegramId: 777000111,
@@ -33,7 +33,7 @@ describe('InitDataService', () => {
     });
   });
 
-  it('не требует поля signature и необязательных полей пользователя', () => {
+  it('does not require signature or optional user fields', () => {
     const raw = signInitData(BOT_TOKEN, { id: 1, first_name: 'A' }, { withSignature: false });
     expect(service.verify(raw)).toMatchObject({
       telegramId: 1,
@@ -43,30 +43,30 @@ describe('InitDataService', () => {
     });
   });
 
-  it('отклоняет подделанные данные', () => {
+  it('rejects tampered data', () => {
     const raw = signInitData(BOT_TOKEN, ivan);
     const tampered = raw.replace(encodeURIComponent('"id":777000111'), encodeURIComponent('"id":1'));
     expect(tampered).not.toBe(raw);
     expect(() => service.verify(tampered)).toThrow(UnauthorizedException);
   });
 
-  it('отклоняет данные, подписанные другим ботом', () => {
+  it('rejects data signed by another bot', () => {
     expect(() => service.verify(signInitData('987654321:other-bot-token', ivan))).toThrow(
       UnauthorizedException,
     );
   });
 
-  it('отклоняет устаревшие данные', () => {
+  it('rejects expired data', () => {
     const old = signInitData(BOT_TOKEN, ivan, { authDate: new Date(Date.now() - 2 * 3600_000) });
     expect(() => service.verify(old)).toThrow(UnauthorizedException);
   });
 
-  it('отклоняет данные без hash и мусор', () => {
+  it('rejects garbage and data without a hash', () => {
     expect(() => service.verify(`user=%7B%7D&auth_date=${nowSeconds()}`)).toThrow(UnauthorizedException);
     expect(() => service.verify('not init data')).toThrow(UnauthorizedException);
   });
 
-  it('отклоняет подписанные данные без пользователя или от бота', () => {
+  it('rejects signed data without a user or from a bot', () => {
     const noUser = signFields(BOT_TOKEN, { auth_date: nowSeconds(), query_id: 'q' });
     expect(() => service.verify(noUser)).toThrow(UnauthorizedException);
 

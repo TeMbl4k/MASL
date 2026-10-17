@@ -4,9 +4,9 @@ import { z } from 'zod';
 import { ENV, type Env } from '../config/env.js';
 
 /**
- * Поле user из initData (JSON в snake_case, как его присылает Telegram).
- * Разбираем сами: parse() из библиотеки требует поле signature, которого
- * может не быть, и не меняет регистр ключей вложенного объекта.
+ * The user field of initData (snake_case JSON, as Telegram sends it).
+ * Parsed by hand: the library's parse() requires the signature field, which
+ * may be missing, and does not camelCase the nested object's keys.
  */
 const initDataUser = z.object({
   id: z.number().int().positive(),
@@ -19,7 +19,7 @@ const initDataUser = z.object({
   is_bot: z.boolean().optional(),
 });
 
-/** Пользователь Telegram, подтверждённый подписью initData. */
+/** Telegram user confirmed by the initData signature. */
 export interface TelegramIdentity {
   telegramId: number;
   firstName: string;
@@ -28,13 +28,13 @@ export interface TelegramIdentity {
   photoUrl: string | null;
   languageCode: string | null;
   allowsWriteToPm: boolean;
-  /** Когда Telegram выдал эту initData (auth_date). */
+  /** When Telegram issued this initData (auth_date). */
   authDate: Date;
 }
 
 /**
- * Проверяет initData, которую Mini App получает от Telegram:
- * HMAC-подпись токеном бота и свежесть auth_date.
+ * Verifies the initData the Mini App receives from Telegram:
+ * HMAC signature with the bot token and auth_date freshness.
  * https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
  */
 @Injectable()
@@ -45,11 +45,11 @@ export class InitDataService {
     try {
       validate(rawInitData, this.env.BOT_TOKEN, { expiresIn: this.env.INIT_DATA_MAX_AGE_SECONDS });
     } catch {
-      // Не раскрываем клиенту, что именно не так: подпись, срок или формат.
+      // Don't tell the client what exactly failed: signature, expiry or format.
       throw new UnauthorizedException('initData не прошла проверку');
     }
 
-    // validate() уже проверил, что auth_date есть и initData свежая.
+    // validate() has already checked that auth_date is present and initData is fresh.
     const params = new URLSearchParams(rawInitData);
     const authDate = new Date(Number(params.get('auth_date')) * 1000);
 

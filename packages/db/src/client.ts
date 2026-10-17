@@ -6,18 +6,18 @@ export type Database = PostgresJsDatabase<typeof schema>;
 
 export interface DbHandle {
   db: Database;
-  /** Закрывает пул соединений (при остановке приложения и в тестах). */
+  /** Closes the connection pool (on app shutdown and in tests). */
   close: () => Promise<void>;
 }
 
 export interface CreateDbOptions {
-  /** Максимум соединений в пуле. */
+  /** Maximum number of pooled connections. */
   max?: number;
 }
 
 /**
- * Параметры libpq, которых нет в postgres.js. Он передал бы их серверу как настройки
- * сессии, и подключение упало бы (Neon добавляет channel_binding в строку подключения).
+ * libpq-only parameters that postgres.js doesn't know. It would pass them to the server as
+ * session settings and the connection would fail (Neon adds channel_binding to its URL).
  */
 const LIBPQ_ONLY_PARAMS = ['channel_binding'];
 
@@ -32,7 +32,7 @@ export function normalizeDatabaseUrl(databaseUrl: string): string {
 export function createDb(databaseUrl: string, options: CreateDbOptions = {}): DbHandle {
   const client = postgres(normalizeDatabaseUrl(databaseUrl), {
     max: options.max ?? 10,
-    // Не засоряем логи NOTICE от CREATE EXTENSION IF NOT EXISTS и т.п.
+    // Keep NOTICEs from CREATE EXTENSION IF NOT EXISTS etc. out of the logs.
     onnotice: () => {},
   });
   const db = drizzle(client, { schema, casing: 'snake_case' });

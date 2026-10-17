@@ -11,28 +11,28 @@ import {
 } from '@telegram-apps/sdk';
 
 export interface TelegramContext {
-  /** Сырая initData для входа на бэкенде; нет, если открыто вне Telegram без dev-подписи. */
+  /** Raw initData for backend login; undefined when opened outside Telegram without dev-signed data. */
   rawInitData: string | undefined;
   inTelegram: boolean;
 }
 
-/** Фон приложения совпадает с тёмной темой дизайна. */
+/** App background matches the design's dark theme. */
 const APP_BACKGROUND = '#000000';
 
 /**
- * Есть ли настоящий клиент Telegram, которому можно слать события: мобильные
- * и десктопные клиенты дают TelegramWebviewProxy, веб-версии открывают Mini App
- * в iframe. Одного isTMA() мало: SDK сохраняет параметры запуска в sessionStorage,
- * и после перезагрузки в обычном браузере isTMA() тоже возвращает true.
+ * Whether a real Telegram client is there to receive events: mobile
+ * and desktop clients expose TelegramWebviewProxy, web clients open the Mini App
+ * in an iframe. isTMA() alone isn't enough: the SDK keeps launch params in sessionStorage,
+ * so after a reload in a regular browser isTMA() still returns true.
  */
 function hasTelegramHost(): boolean {
   return 'TelegramWebviewProxy' in window || window.self !== window.top;
 }
 
 /**
- * Для разработки в обычном браузере: VITE_DEV_INIT_DATA — initData, подписанная
- * локальным BOT_TOKEN (`pnpm --filter @masl/api dev:init-data`). Бэкенд проверяет
- * подпись по-настоящему, поэтому произвольная строка не подойдёт.
+ * For development in a regular browser: VITE_DEV_INIT_DATA is initData signed
+ * with the local BOT_TOKEN (`pnpm --filter @masl/api dev:init-data`). The backend
+ * really verifies the signature, so an arbitrary string won't work.
  */
 function mockOutsideTelegram(): boolean {
   if (!import.meta.env.DEV) {
@@ -68,7 +68,7 @@ export function initTelegram(): TelegramContext {
   init();
   miniAppReady.ifAvailable();
   expandViewport.ifAvailable();
-  // Цвета шапки и фона меняются только у смонтированного компонента miniApp.
+  // Header and background colors can only be set once the miniApp component is mounted.
   mountMiniAppSync.ifAvailable();
   setMiniAppHeaderColor.ifAvailable(APP_BACKGROUND);
   setMiniAppBackgroundColor.ifAvailable(APP_BACKGROUND);

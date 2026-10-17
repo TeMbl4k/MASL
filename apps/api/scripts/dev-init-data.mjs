@@ -1,5 +1,5 @@
-// Печатает initData, подписанную локальным BOT_TOKEN, чтобы открыть Mini App в обычном браузере.
-// Запуск: pnpm --filter @masl/api dev:init-data [telegramId] [имя]
+// Prints initData signed with the local BOT_TOKEN so the Mini App can be opened in a regular browser.
+// Usage: pnpm --filter @masl/api dev:init-data [telegramId] [name]
 import { createHmac } from 'node:crypto';
 
 const botToken = process.env.BOT_TOKEN;
@@ -12,7 +12,7 @@ const [id = '100000001', firstName = 'Тестер'] = process.argv.slice(2);
 const fields = {
   auth_date: String(Math.floor(Date.now() / 1000)),
   query_id: 'dev-query',
-  // Настоящий Telegram присылает и signature (Ed25519); SDK на фронте без неё не разбирает initData.
+  // Real Telegram also sends signature (Ed25519); the frontend SDK fails to parse initData without it.
   signature: 'dev-signature',
   user: JSON.stringify({
     id: Number(id),

@@ -12,7 +12,7 @@ export interface FakeTelegramUser {
 }
 
 /**
- * Подписывает произвольные поля initData так же, как Telegram (независимо от библиотеки):
+ * Signs arbitrary initData fields the way Telegram does (independently of the library):
  * https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
  */
 export function signFields(botToken: string, fields: Record<string, string>): string {
@@ -25,7 +25,7 @@ export function signFields(botToken: string, fields: Record<string, string>): st
   return new URLSearchParams({ ...fields, hash }).toString();
 }
 
-/** initData с пользователем, как её отдаёт Telegram.WebApp.initData. */
+/** initData with a user, as Telegram.WebApp.initData provides it. */
 export function signInitData(
   botToken: string,
   user: FakeTelegramUser,

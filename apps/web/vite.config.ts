@@ -11,14 +11,14 @@ export default defineConfig({
         // Force runes mode for the project, except for libraries. Can be removed in svelte 6.
         runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true),
       },
-      // SPA: все маршруты отдаются через index.html, рендер только на клиенте.
+      // SPA: every route falls back to index.html, rendering is client-only.
       adapter: adapter({ fallback: 'index.html' }),
     }),
   ],
   server: {
-    // Туннель для проверки в Telegram: cloudflared tunnel --url http://localhost:5173
+    // Tunnel for testing inside Telegram: cloudflared tunnel --url http://localhost:5173
     allowedHosts: ['.trycloudflare.com'],
-    // API на том же домене, как в продакшене: один туннель на всё и без CORS.
+    // API on the same origin as in production: one tunnel for everything and no CORS.
     proxy: { '/api': 'http://localhost:3000' },
   },
   test: {

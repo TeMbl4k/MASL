@@ -13,13 +13,13 @@ const adminUrl = process.env.TEST_DATABASE_URL;
 const BOT_TOKEN = '123456789:AAE-e2e-token_for-masl';
 const WEB_ORIGIN = 'https://masl.example';
 
-describe.skipIf(!adminUrl)('API e2e (нужен TEST_DATABASE_URL)', () => {
+describe.skipIf(!adminUrl)('API e2e (requires TEST_DATABASE_URL)', () => {
   let testDb: TestDatabase;
   let app: NestFastifyApplication;
   let webDistDir: string;
 
   beforeAll(async () => {
-    // Мини-сборка Mini App: API отдаёт её с того же домена.
+    // Minimal Mini App build for the API to serve from the same origin.
     webDistDir = await mkdtemp(join(tmpdir(), 'masl-web-'));
     await mkdir(join(webDistDir, '_app', 'immutable'), { recursive: true });
     await writeFile(join(webDistDir, 'index.html'), '<!doctype html><title>MASL</title>');
@@ -53,7 +53,7 @@ describe.skipIf(!adminUrl)('API e2e (нужен TEST_DATABASE_URL)', () => {
     return response.json<AuthResponse>();
   };
 
-  it('отдаёт Mini App с того же домена, а неизвестные пути API — JSON 404', async () => {
+  it('serves the Mini App from the same origin and JSON 404 for unknown API paths', async () => {
     for (const url of ['/', '/lobby/42']) {
       const page = await app.inject({ method: 'GET', url });
       expect(page.statusCode, url).toBe(200);
@@ -73,19 +73,19 @@ describe.skipIf(!adminUrl)('API e2e (нужен TEST_DATABASE_URL)', () => {
     }
   });
 
-  it('GET /api/health отвечает ok', async () => {
+  it('GET /api/health returns ok', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/health' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: 'ok' });
   });
 
-  it('GET /interests отдаёт справочник, синхронизированный при старте', async () => {
+  it('GET /interests returns the catalog synced on startup', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/interests' });
     expect(response.statusCode).toBe(200);
     expect(response.json().map((i: { slug: string }) => i.slug)).toEqual(INTERESTS.map((i) => i.slug));
   });
 
-  it('без токена /me недоступен', async () => {
+  it('/me is unavailable without a token', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/me' })).statusCode).toBe(401);
     const badToken = await app.inject({
       method: 'GET',
@@ -95,7 +95,7 @@ describe.skipIf(!adminUrl)('API e2e (нужен TEST_DATABASE_URL)', () => {
     expect(badToken.statusCode).toBe(401);
   });
 
-  it('отклоняет поддельную initData и пустое тело', async () => {
+  it('rejects forged initData and an empty body', async () => {
     const forged = await app.inject({
       method: 'POST',
       url: '/api/auth/telegram',
@@ -107,7 +107,7 @@ describe.skipIf(!adminUrl)('API e2e (нужен TEST_DATABASE_URL)', () => {
     expect(empty.statusCode).toBe(400);
   });
 
-  it('первый вход создаёт пользователя со стартовой кармой, повторный обновляет профиль', async () => {
+  it('first sign-in creates a user with starting karma, a repeat sign-in updates the profile', async () => {
     const first = await login({ id: 4242, first_name: 'Аня', username: 'anya' });
     expect(first.token).toEqual(expect.any(String));
     expect(first.user).toMatchObject<Partial<MeDto>>({
@@ -125,7 +125,7 @@ describe.skipIf(!adminUrl)('API e2e (нужен TEST_DATABASE_URL)', () => {
     expect(second.user.username).toBe('anna');
   });
 
-  it('вход по более старой initData не откатывает профиль', async () => {
+  it('sign-in with older initData does not roll back the profile', async () => {
     await login({ id: 6363, first_name: 'Оля', username: 'olya_new' });
     const stale = await login(
       { id: 6363, first_name: 'Оля', username: 'olya_old' },
@@ -134,7 +134,7 @@ describe.skipIf(!adminUrl)('API e2e (нужен TEST_DATABASE_URL)', () => {
     expect(stale.user.username).toBe('olya_new');
   });
 
-  it('онбординг сохраняет пол, возраст и интересы', async () => {
+  it('onboarding saves gender, age and interests', async () => {
     const { token } = await login({ id: 5151, first_name: 'Иван' });
     const auth = { authorization: `Bearer ${token}` };
 
@@ -168,7 +168,7 @@ describe.skipIf(!adminUrl)('API e2e (нужен TEST_DATABASE_URL)', () => {
       interests: ['boardgames', 'networking', 'sport'],
     });
 
-    // Повторный онбординг заменяет интересы, а не добавляет.
+    // Repeat onboarding replaces interests instead of appending to them.
     const again = await app.inject({
       method: 'PUT',
       url: '/api/me/onboarding',
@@ -185,7 +185,7 @@ describe.skipIf(!adminUrl)('API e2e (нужен TEST_DATABASE_URL)', () => {
     });
   });
 
-  it('CORS пускает только домены из WEB_ORIGINS', async () => {
+  it('CORS allows only origins from WEB_ORIGINS', async () => {
     const allowed = await app.inject({
       method: 'OPTIONS',
       url: '/api/me',

@@ -7,7 +7,7 @@ import { createTestDatabase, type TestDatabase } from './testing.js';
 
 const adminUrl = process.env.TEST_DATABASE_URL;
 
-describe.skipIf(!adminUrl)('миграции (нужен TEST_DATABASE_URL)', () => {
+describe.skipIf(!adminUrl)('migrations (requires TEST_DATABASE_URL)', () => {
   let testDb: TestDatabase;
 
   beforeAll(async () => {
@@ -18,7 +18,7 @@ describe.skipIf(!adminUrl)('миграции (нужен TEST_DATABASE_URL)', ()
     await testDb?.drop();
   });
 
-  it('несколько экземпляров, запущенных одновременно, применяют миграции по очереди', async () => {
+  it('concurrently started instances apply migrations one at a time', async () => {
     await Promise.all([runMigrations(testDb.url), runMigrations(testDb.url), runMigrations(testDb.url)]);
 
     const client = postgres(testDb.url, { max: 1 });

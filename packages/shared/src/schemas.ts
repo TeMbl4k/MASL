@@ -5,13 +5,13 @@ import { INTERESTS } from './interests.js';
 
 const interestSlug = z.enum(INTERESTS.map((i) => i.slug) as [string, ...string[]]);
 
-/** POST /auth/telegram — сырая строка initData из Telegram.WebApp. */
+/** POST /auth/telegram — raw initData string from Telegram.WebApp. */
 export const telegramAuthInput = z.object({
   initData: z.string().min(1).max(4096),
 });
 export type TelegramAuthInput = z.infer<typeof telegramAuthInput>;
 
-/** PUT /me/onboarding — единственный шаг онбординга. */
+/** PUT /me/onboarding — onboarding is a single step. */
 export const onboardingInput = z.object({
   gender: z.enum(GENDERS),
   age: z.number().int().min(AGE_MIN).max(AGE_MAX),
@@ -23,7 +23,7 @@ export const onboardingInput = z.object({
 });
 export type OnboardingInput = z.infer<typeof onboardingInput>;
 
-/** Профиль текущего пользователя, который отдаёт API. */
+/** Current user's profile as returned by the API. */
 export const meDto = z.object({
   id: z.string().uuid(),
   telegramId: z.number().int(),

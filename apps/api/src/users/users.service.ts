@@ -10,9 +10,9 @@ export class UsersService {
   constructor(@Inject(DB) private readonly db: Database) {}
 
   /**
-   * Создаёт пользователя при первом входе или обновляет данные из Telegram при повторном.
-   * Профиль берётся только из initData не старше той, что уже сохранена: старая initData
-   * (её можно прислать повторно в течение INIT_DATA_MAX_AGE_SECONDS) не откатит username и фото.
+   * Creates the user on first sign-in or refreshes Telegram data on later ones.
+   * The profile is taken only from initData no older than the stored one, so stale initData
+   * (it can be replayed within INIT_DATA_MAX_AGE_SECONDS) can't roll back username and photo.
    */
   async upsertFromTelegram(identity: TelegramIdentity): Promise<User> {
     const isNewer = sql`excluded.telegram_auth_date >= ${users.telegramAuthDate}`;

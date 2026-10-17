@@ -9,12 +9,12 @@ import { createTestDatabase, type TestDatabase } from './testing.js';
 
 const adminUrl = process.env.TEST_DATABASE_URL;
 
-// Метро «Динамо» и «Белорусская»: около 2 км по прямой.
+// Dinamo and Belorusskaya metro stations: about 2 km apart in a straight line.
 const DINAMO: GeoPoint = { lng: 37.5585, lat: 55.7894 };
 const BELORUSSKAYA: GeoPoint = { lng: 37.5818, lat: 55.7774 };
 const ZELENOGRAD: GeoPoint = { lng: 37.1944, lat: 55.9825 };
 
-describe.skipIf(!adminUrl)('PostGIS и схема (нужен TEST_DATABASE_URL)', () => {
+describe.skipIf(!adminUrl)('PostGIS and schema (requires TEST_DATABASE_URL)', () => {
   let testDb: TestDatabase;
   let handle: DbHandle;
   let hostId: string;
@@ -35,19 +35,19 @@ describe.skipIf(!adminUrl)('PostGIS и схема (нужен TEST_DATABASE_URL)
     await testDb?.drop();
   });
 
-  it('сид интересов идемпотентен и убирает интересы, которых больше нет в списке', async () => {
+  it('interest seed is idempotent and removes interests no longer in the list', async () => {
     await handle.db.insert(interests).values({ slug: 'chess', title: 'Шахматы', emoji: '♟️', sortOrder: 99 });
     await seedInterests(handle.db);
     const rows = await handle.db.select().from(interests).orderBy(asc(interests.sortOrder));
     expect(rows.map((r) => r.slug)).toEqual(INTEREST_SLUGS);
   });
 
-  it('новичок получает стартовую карму', async () => {
+  it('new user gets the starting karma', async () => {
     const [row] = await handle.db.select().from(users).where(eq(users.id, hostId));
     expect(row?.karma).toBe(KARMA.START);
   });
 
-  it('сохраняет и читает точку лобби, считает расстояние в метрах', async () => {
+  it('stores and reads a lobby point, computes distance in meters', async () => {
     const startsAt = new Date(Date.now() + 3600_000);
     const [lobby] = await handle.db
       .insert(lobbies)
@@ -75,7 +75,7 @@ describe.skipIf(!adminUrl)('PostGIS и схема (нужен TEST_DATABASE_URL)
     expect(row?.meters).toBeLessThan(2200);
   });
 
-  it('фильтрует лобби по радиусу', async () => {
+  it('filters lobbies by radius', async () => {
     const startsAt = new Date(Date.now() + 7200_000);
     await handle.db.insert(lobbies).values({
       hostId,
@@ -96,7 +96,7 @@ describe.skipIf(!adminUrl)('PostGIS и схема (нужен TEST_DATABASE_URL)
     expect(near.map((r) => r.title)).toEqual(['Падел-теннис 2х2']);
   });
 
-  it('не даёт создать лобби, которое заканчивается раньше начала', async () => {
+  it('rejects a lobby that ends before it starts', async () => {
     const startsAt = new Date(Date.now() + 3600_000);
     await expect(
       handle.db.insert(lobbies).values({
@@ -113,7 +113,7 @@ describe.skipIf(!adminUrl)('PostGIS и схема (нужен TEST_DATABASE_URL)
     ).rejects.toThrow();
   });
 
-  it('не задваивает начисление кармы за одно лобби', async () => {
+  it('does not award karma twice for the same lobby', async () => {
     const [lobby] = await handle.db.select({ id: lobbies.id }).from(lobbies).limit(1);
     const event = { userId: hostId, lobbyId: lobby!.id, reason: 'attended' as const, delta: KARMA.ATTENDED };
     await handle.db.insert(karmaEvents).values(event);

@@ -7,9 +7,9 @@ export interface InterestDefinition {
 }
 
 /**
- * Облако интересов на онбординге. Slug совпадает с категорией лобби:
- * совпадение интересов пользователя с категорией поднимает лобби в ленте «Для вас».
- * Источник правды для сида таблицы interests.
+ * Interest cloud shown at onboarding. Each slug equals a lobby category:
+ * a lobby whose category matches the user's interests ranks higher in the "For you" feed.
+ * Source of truth for seeding the interests table.
  */
 export const INTERESTS: readonly InterestDefinition[] = [
   { slug: 'sport', title: 'Спорт', emoji: '🏀' },

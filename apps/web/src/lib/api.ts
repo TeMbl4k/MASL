@@ -1,9 +1,9 @@
 import type { AuthResponse, InterestDto, MeDto, OnboardingInput } from '@masl/shared';
 
 /**
- * Адрес API. По умолчанию `/api` на том же домене: в продакшене API сам отдаёт
- * Mini App, в разработке Vite проксирует /api на localhost:3000. VITE_API_URL
- * нужен, только если API живёт на другом домене.
+ * API base URL. Defaults to `/api` on the same origin: in production the API serves
+ * the Mini App itself, in development Vite proxies /api to localhost:3000. VITE_API_URL
+ * is only needed when the API lives on another domain.
  */
 const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) || '/api').replace(/\/$/, '');
 
@@ -33,7 +33,7 @@ async function request<T>(path: string, init: RequestInit & { token?: string } =
         message = body.message;
       }
     } catch {
-      // тело не JSON — оставляем общий текст
+      // body isn't JSON, keep the generic message
     }
     throw new ApiError(response.status, message);
   }

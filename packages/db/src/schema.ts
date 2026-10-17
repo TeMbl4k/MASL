@@ -50,25 +50,25 @@ export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    /** Telegram user id (до 52 бит, безопасно помещается в JS number). */
+    /** Telegram user id (up to 52 bits, fits safely in a JS number). */
     telegramId: bigint('telegram_id', { mode: 'number' }).notNull(),
     firstName: varchar('first_name', { length: 128 }).notNull(),
     lastName: varchar('last_name', { length: 128 }),
     username: varchar('username', { length: 64 }),
     photoUrl: text('photo_url'),
     languageCode: varchar('language_code', { length: 16 }),
-    /** Разрешил ли пользователь боту писать в личку (initData.user.allows_write_to_pm). */
+    /** Whether the user allowed the bot to message them privately (initData.user.allows_write_to_pm). */
     allowsWriteToPm: boolean('allows_write_to_pm').notNull().default(false),
-    /** auth_date initData, из которой взят профиль: более старая initData его не перезаписывает. */
+    /** auth_date of the initData the profile came from; older initData doesn't overwrite it. */
     telegramAuthDate: timestamp('telegram_auth_date', { withTimezone: true }).notNull(),
     gender: genderEnum('gender'),
-    /** Храним год рождения, а не возраст, чтобы возраст не устаревал. */
+    /** Birth year rather than age, so the age never goes stale. */
     birthYear: smallint('birth_year'),
-    /** Текущая карма = KARMA.START + сумма delta из karma_events. */
+    /** Current karma = KARMA.START + sum of delta in karma_events. */
     karma: integer('karma').notNull().default(KARMA.START),
-    /** Теневой бан до проверки модератором (3 жалобы). */
+    /** Shadow ban pending moderator review (after 3 reports). */
     isShadowBanned: boolean('is_shadow_banned').notNull().default(false),
-    /** Блокировка создания лобби после host flake, снимается апелляцией. */
+    /** Lobby creation blocked after a host flake; lifted on appeal. */
     lobbyCreationBlocked: boolean('lobby_creation_blocked').notNull().default(false),
     onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
@@ -109,14 +109,14 @@ export const lobbies = pgTable(
     description: varchar('description', { length: LOBBY_DESCRIPTION_MAX }),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
     endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
-    /** Точное место. Отдаётся только хосту и одобренным участникам. */
+    /** Exact location. Exposed only to the host and approved members. */
     location: geographyPoint('location').notNull(),
     address: text('address').notNull(),
-    /** Публичное примерное место для ленты и карточки, например «м. Динамо». */
+    /** Public approximate place for the feed and lobby card, e.g. "м. Динамо". */
     placeHint: varchar('place_hint', { length: 128 }).notNull(),
-    /** Сколько участников нужно хосту (без учёта самого хоста), «+3». */
+    /** Number of participants the host needs, excluding the host ("+3"). */
     slots: smallint('slots').notNull(),
-    /** Порог кармы для входа; null — без фильтра. */
+    /** Minimum karma to join; null means no filter. */
     minKarma: smallint('min_karma'),
     paymentFormat: paymentFormatEnum('payment_format').notNull().default('free'),
     status: lobbyStatusEnum('status').notNull().default('open'),
@@ -176,7 +176,7 @@ export const karmaEvents = pgTable(
   },
   (t) => [
     index('karma_events_user_idx').on(t.userId, t.createdAt),
-    // Одно начисление/штраф одного типа за одно лобби: повторная обработка не задвоит карму.
+    // One award/penalty per reason per lobby, so reprocessing can't double-count karma.
     uniqueIndex('karma_events_once_per_lobby_uq')
       .on(t.userId, t.lobbyId, t.reason)
       .where(sql`${t.lobbyId} is not null`),

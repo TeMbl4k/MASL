@@ -1,7 +1,7 @@
 import { customType } from 'drizzle-orm/pg-core';
 import { sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 
-/** Точка в WGS 84: долгота и широта в градусах. */
+/** WGS 84 point: longitude and latitude in degrees. */
 export interface GeoPoint {
   lng: number;
   lat: number;
@@ -14,15 +14,15 @@ export function assertValidPoint(point: GeoPoint): void {
   }
 }
 
-/** EWKT, который PostgreSQL сам приводит к geography(Point, 4326). */
+/** EWKT that PostgreSQL implicitly casts to geography(Point, 4326). */
 export function toEwkt(point: GeoPoint): string {
   assertValidPoint(point);
   return `SRID=4326;POINT(${point.lng} ${point.lat})`;
 }
 
 /**
- * Разбирает hex (E)WKB точки, в котором PostGIS отдаёт geography/geometry.
- * Поддерживается только Point (2D), с SRID и без.
+ * Parses a point from hex (E)WKB, the format PostGIS returns geography/geometry in.
+ * Only 2D Point is supported, with or without SRID.
  */
 export function parsePointWkb(hex: string): GeoPoint {
   const bytes = Buffer.from(hex, 'hex');
@@ -52,12 +52,12 @@ export function parsePointWkb(hex: string): GeoPoint {
 }
 
 /**
- * Колонка geography(Point, 4326). Расстояния по ней PostGIS считает в метрах.
+ * geography(Point, 4326) column. PostGIS computes distances on it in meters.
  *
- * Внимание: drizzle-kit берёт имя пользовательского типа в кавычки
- * ("geography(Point, 4326)"), и PostgreSQL такой тип не находит. После
- * `drizzle-kit generate` уберите кавычки в сгенерированном SQL вручную;
- * тест миграций в geo.integration.test.ts это ловит.
+ * Gotcha: drizzle-kit quotes the custom type name ("geography(Point, 4326)"),
+ * and PostgreSQL can't find such a type. After `drizzle-kit generate`, remove
+ * the quotes from the generated SQL by hand; the migration test in
+ * geo.integration.test.ts catches this.
  */
 export const geographyPoint = customType<{ data: GeoPoint; driverData: string }>({
   dataType() {
@@ -71,18 +71,18 @@ export const geographyPoint = customType<{ data: GeoPoint; driverData: string }>
   },
 });
 
-/** SQL-выражение точки geography из координат (параметризовано). */
+/** Parameterized SQL expression for a geography point from coordinates. */
 export function geographyFrom(point: GeoPoint): SQL {
   assertValidPoint(point);
   return sql`ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography`;
 }
 
-/** Расстояние в метрах между колонкой geography и точкой. */
+/** Distance in meters between a geography column and a point. */
 export function distanceMeters(column: SQLWrapper, point: GeoPoint): SQL<number> {
   return sql<number>`ST_Distance(${column}, ${geographyFrom(point)})`.mapWith(Number);
 }
 
-/** Условие «колонка в радиусе N метров от точки». Использует GIST-индекс. */
+/** Condition "column is within N meters of the point". Uses the GIST index. */
 export function withinMeters(column: SQLWrapper, point: GeoPoint, meters: number): SQL {
   return sql`ST_DWithin(${column}, ${geographyFrom(point)}, ${meters})`;
 }

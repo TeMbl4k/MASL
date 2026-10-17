@@ -8,7 +8,7 @@ import { DB } from '../db/db.module.js';
 class InterestsService implements OnApplicationBootstrap {
   constructor(@Inject(DB) private readonly db: Database) {}
 
-  /** Справочник интересов живёт в коде (@masl/shared) и синхронизируется в БД при старте. */
+  /** The interests catalog lives in code (@masl/shared) and is synced to the DB on startup. */
   async onApplicationBootstrap(): Promise<void> {
     await seedInterests(this.db);
   }

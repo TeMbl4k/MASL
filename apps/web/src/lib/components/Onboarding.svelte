@@ -23,7 +23,7 @@
   let age = $state(25);
   let selected = $state<string[]>([]);
   let submitting = $state(false);
-  /** Нажимали «Начать поиск» с неполной формой: показываем, чего не хватает, пока не заполнят. */
+  /** Submit was tapped with an incomplete form: show what's missing until it's filled in. */
   let triedIncomplete = $state(false);
   let error = $state<string | null>(null);
 
@@ -130,7 +130,7 @@
   {/if}
 
   <div class="fixed inset-x-0 bottom-0 bg-gradient-to-t from-ink via-ink/90 to-transparent px-5 pt-6 pb-8">
-    <!-- Кнопка активна и при неполной форме: по нажатию объясняем, чего не хватает. -->
+    <!-- The button stays enabled on an incomplete form so a tap can explain what's missing. -->
     <button
       type="button"
       class="w-full rounded-2xl py-4 text-xl font-bold transition {isComplete

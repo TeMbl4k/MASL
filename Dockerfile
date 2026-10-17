@@ -1,19 +1,19 @@
-# Образ для Railway (и любого Docker-хостинга): один процесс отдаёт и Mini App, и API на /api.
+# Image for Railway (or any Docker host): one process serves both the Mini App and the API under /api.
 FROM node:22-bookworm-slim AS base
 WORKDIR /app
 ENV CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 
-# Сборка всего монорепозитория.
+# Build the whole monorepo.
 FROM base AS build
-# Сначала только lock-файл: слой с пакетами кэшируется, пока зависимости не менялись.
+# Lockfile first: the package layer stays cached until dependencies change.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm fetch
 COPY . .
 RUN pnpm install --offline --frozen-lockfile && pnpm build
 
-# Только рабочие зависимости API и его пакетов (@masl/db, @masl/shared).
-# Новый пакет в монорепозитории, от которого зависит API, добавьте сюда же.
+# Production dependencies only, for the API and its packages (@masl/db, @masl/shared).
+# When the API starts depending on a new workspace package, add it here too.
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
@@ -32,5 +32,5 @@ COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/apps/web/build apps/web/build
 USER node
 EXPOSE 3000
-# Миграции перед стартом: отдельной настройки на хостинге не нужно.
+# Run migrations before start, so the host needs no separate setup for them.
 CMD ["sh", "-c", "node packages/db/dist/bin/migrate.js && exec node apps/api/dist/main.js"]

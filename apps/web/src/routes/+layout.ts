@@ -1,3 +1,3 @@
-// Mini App работает только в браузере Telegram: собираем чистое SPA без SSR и пререндера.
+// The Mini App only runs inside Telegram's webview: build a plain SPA, no SSR or prerendering.
 export const ssr = false;
 export const prerender = false;

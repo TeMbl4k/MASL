@@ -1,21 +1,21 @@
 import { join, sep } from 'node:path';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { FastifyReply } from 'fastify';
-// Только типы: добавляют reply.sendFile() из @fastify/static.
+// Types only: adds reply.sendFile() from @fastify/static.
 import type {} from '@fastify/static';
 
-/** Общий префикс всех маршрутов API: Mini App и API живут на одном домене. */
+/** Common prefix for all API routes: the Mini App and the API share one origin. */
 export const API_PREFIX = 'api';
 
 const IMMUTABLE = 'public, max-age=31536000, immutable';
-/** Браузер может хранить файл, но перед использованием перепроверяет (ETag → 304). */
+/** The browser may cache the file but revalidates it before use (ETag → 304). */
 const REVALIDATE = 'no-cache';
 
 /**
- * Путь, который обслуживает клиентский роутер SvelteKit: не /api, не /_app
- * (файлы сборки) и без расширения в последнем сегменте. Поэтому /missing.js
- * или старый чанк /_app/immutable/x.js после деплоя получают честный 404,
- * а не index.html с кодом 200.
+ * A path handled by the SvelteKit client router: not /api, not /_app
+ * (build files), and no extension in the last segment. This way /missing.js
+ * or a stale /_app/immutable/x.js chunk after a deploy gets a real 404
+ * instead of index.html with status 200.
  */
 export function isSpaRoute(url: string): boolean {
   const path = url.split('?', 1)[0] ?? '/';
@@ -31,22 +31,22 @@ export function isSpaRoute(url: string): boolean {
 }
 
 /**
- * Отдаёт сборку Mini App (adapter-static) из того же Fastify, что и API.
- * Вызывать до app.init() / app.listen().
+ * Serves the Mini App build (adapter-static) from the same Fastify instance as the API.
+ * Call before app.init() / app.listen().
  */
 export function serveSpa(app: NestFastifyApplication, root: string): void {
   const immutableDir = join(root, '_app', 'immutable') + sep;
 
   app.useStaticAssets({
     root,
-    // Маршрут на каждый файл сборки, найденный при старте (и "/" для index.html).
-    // Шаблон "/*" остаётся свободным для fallback ниже.
+    // One route per build file found at startup (plus "/" for index.html),
+    // which leaves the "/*" pattern free for the fallback below.
     wildcard: false,
-    // Cache-Control ставим сами в setHeaders.
+    // Cache-Control is set manually in setHeaders.
     cacheControl: false,
-    // @fastify/static 10 передаёт в setHeaders FastifyReply, а тип в Nest 12
-    // всё ещё описывает объект с setHeader(). Вызов res.setHeader() компилируется,
-    // но роняет процесс на первом же запросе файла, поэтому reply.header().
+    // @fastify/static 10 passes a FastifyReply to setHeaders, but the Nest 12 type
+    // still describes an object with setHeader(). res.setHeader() compiles but
+    // crashes the process on the very first file request, hence reply.header().
     setHeaders(res, filePath) {
       (res as unknown as FastifyReply).header(
         'cache-control',
@@ -55,17 +55,17 @@ export function serveSpa(app: NestFastifyApplication, root: string): void {
     },
   });
 
-  // SPA fallback. Маршруты файлов и Nest точнее "/*", поэтому сюда попадают
-  // только GET/HEAD, которым ничего другого не подошло.
+  // SPA fallback. File and Nest routes are more specific than "/*", so only
+  // GET/HEAD requests that matched nothing else end up here.
   app
     .getHttpAdapter()
     .getInstance()
     .get('/*', (request, reply) => {
       if (!isSpaRoute(request.url)) {
-        // Обработчик Nest для ненайденных маршрутов: JSON 404.
+        // Nest's not-found handler: JSON 404.
         return reply.callNotFound();
       }
-      // Через @fastify/static, так что setHeaders выше добавит no-cache.
+      // Goes through @fastify/static, so setHeaders above adds no-cache.
       return reply.sendFile('index.html');
     });
 }

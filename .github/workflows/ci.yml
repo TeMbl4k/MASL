@@ -44,7 +44,7 @@ jobs:
       - run: pnpm test
 
   docker:
-    # Тот же образ, что собирает Railway: сборка и запуск на чистой базе PostGIS.
+    # Same image Railway builds: build it and boot it against a fresh PostGIS database.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

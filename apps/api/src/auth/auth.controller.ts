@@ -14,8 +14,8 @@ export class AuthController {
   ) {}
 
   /**
-   * Вход по initData: Mini App отправляет строку Telegram.WebApp.initData,
-   * API проверяет подпись, создаёт или обновляет пользователя и выдаёт сессию.
+   * Sign-in via initData: the Mini App sends the Telegram.WebApp.initData string,
+   * the API verifies the signature, creates or updates the user and issues a session.
    */
   @Post('telegram')
   @HttpCode(200)

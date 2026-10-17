@@ -10,23 +10,23 @@ import { API_PREFIX, serveSpa } from './spa.js';
 export interface CreateAppOptions {
   logger?: boolean;
   /**
-   * Каталог сборки Mini App (apps/web/build). Если в нём есть index.html,
-   * API отдаёт Mini App с того же домена; иначе пишет предупреждение и работает
-   * только API (так в разработке, где Mini App отдаёт Vite).
+   * Mini App build directory (apps/web/build). If it contains index.html,
+   * the API serves the Mini App from the same origin; otherwise it logs a warning
+   * and serves only the API (the dev setup, where Vite serves the Mini App).
    */
   webDistDir?: string;
 }
 
-/** Собирает приложение; используется и в main.ts, и в e2e-тестах. */
+/** Builds the app; shared by main.ts and the e2e tests. */
 export async function createApp(env: Env, options: CreateAppOptions = {}): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule.forRoot(env),
-    // Railway и другие хостинги стоят за прокси.
+    // Railway and other hosts run behind a proxy.
     new FastifyAdapter({ trustProxy: true }),
     { logger: options.logger === false ? false : undefined },
   );
   app.setGlobalPrefix(API_PREFIX);
-  // CORS нужен, только если Mini App открывается с другого домена.
+  // CORS is only needed when the Mini App is opened from another origin.
   if (env.WEB_ORIGINS.length > 0) {
     app.enableCors({
       origin: env.WEB_ORIGINS,

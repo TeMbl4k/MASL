@@ -8,6 +8,6 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL ?? 'postgres://masl:masl@localhost:5432/masl',
   },
-  // Таблицы PostGIS (spatial_ref_sys и т.п.) не наши — не трогаем.
+  // PostGIS tables (spatial_ref_sys etc.) aren't ours; leave them alone.
   extensionsFilters: ['postgis'],
 });
