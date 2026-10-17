@@ -35,4 +35,24 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...base, WEB_DIST_DIR: '' }).WEB_DIST_DIR).toBeUndefined();
     expect(loadEnv({ ...base, WEB_DIST_DIR: 'web/build' }).WEB_DIST_DIR).toBe(resolve('web/build'));
   });
+
+  it('DADATA_API_KEY is optional and an empty value means no key', () => {
+    expect(loadEnv(base).DADATA_API_KEY).toBeUndefined();
+    expect(loadEnv({ ...base, DADATA_API_KEY: '' }).DADATA_API_KEY).toBeUndefined();
+    expect(loadEnv({ ...base, DADATA_API_KEY: '  ' }).DADATA_API_KEY).toBeUndefined();
+    expect(loadEnv({ ...base, DADATA_API_KEY: 'a1b2c3d4e5' }).DADATA_API_KEY).toBe('a1b2c3d4e5');
+  });
+
+  it('refuses a placeholder DADATA_API_KEY without echoing the value', () => {
+    const value = 'replace-with-dadata-key';
+    let error: unknown;
+    try {
+      loadEnv({ ...base, DADATA_API_KEY: value });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/DADATA_API_KEY/);
+    expect((error as Error).message).not.toContain(value);
+  });
 });

@@ -79,6 +79,21 @@ export const envSchema = z
      * the Mini App and the API share one origin, and in development Vite proxies /api.
      */
     WEB_ORIGINS: webOrigins,
+    /**
+     * DaData key for address suggestions; optional. Without it the place is picked on the map
+     * and the API makes no calls to DaData.
+     */
+    DADATA_API_KEY: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+      z
+        .string()
+        .trim()
+        .refine(
+          (value) => !isPlaceholder(value),
+          'DADATA_API_KEY не заменён: возьмите ключ в личном кабинете DaData или оставьте пустым',
+        )
+        .optional(),
+    ),
     /** Mini App build directory, if it is not apps/web/build. */
     WEB_DIST_DIR: z.preprocess(
       (value) => (value === '' ? undefined : value),

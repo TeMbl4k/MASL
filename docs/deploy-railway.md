@@ -51,6 +51,8 @@
    JWT_SECRET=<случайная строка 2>
    ```
 
+   По желанию добавьте `DADATA_API_KEY=<ключ DaData>` для подсказок адресов; без него место выбирают точкой на карте.
+
 5. **Settings** → **Deploy** → **Healthcheck Path**: `/api/health`.
 6. **Settings** → **Networking** → **Generate Domain**, порт `3000`. Получится адрес `https://<имя>.up.railway.app`.
 7. Нажмите **Deploy**: изменения переменных применяются только после него.
