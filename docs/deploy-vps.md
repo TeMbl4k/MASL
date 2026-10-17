@@ -24,7 +24,7 @@
 
 ```sh
 apt-get update && apt-get install -y git
-git clone -b stage-1-scaffold https://github.com/TeMbl4k/MASL.git masl
+git clone https://github.com/TeMbl4k/MASL.git masl
 cd masl && bash deploy/install.sh
 ```
 
@@ -51,7 +51,7 @@ cd masl && bash deploy/install.sh
 cd masl && bash deploy/update.sh
 ```
 
-Скрипт скачает свежий код и пересоберёт приложение, база и настройки сохраняются. После слияния PR с этапом 1 один раз переключитесь на основную ветку: `cd masl && git checkout main && bash deploy/update.sh`.
+Скрипт скачает свежий код и пересоберёт приложение, база и настройки сохраняются. Если сервер ставили, пока этап 1 был в отдельной ветке, один раз переключитесь на основную: `cd masl && git checkout main && bash deploy/update.sh`.
 
 ## Полезные команды
 

@@ -31,7 +31,7 @@
 3. Заполните форму:
    - Name: например `masl`, из него получится адрес.
    - Language: **Docker** (Render определит сам по `Dockerfile`).
-   - Branch: `stage-1-scaffold`, пока PR с этапом 1 не слит; потом `main`.
+   - Branch: `main`.
    - Region: **Frankfurt**, рядом с базой.
    - Root Directory оставьте пустым.
    - Instance Type: **Free**.
@@ -61,7 +61,7 @@
 
 ## 4. Обновления
 
-Каждый push в выбранную ветку Render деплоит сам. После слияния PR переключите ветку на `main`: сервис → **Settings** → **Build & Deploy** → **Branch**.
+Каждый push в `main` Render деплоит сам.
 
 ## Если что-то не так
 
