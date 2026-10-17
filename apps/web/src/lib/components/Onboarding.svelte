@@ -10,6 +10,7 @@
     type MeDto,
     type OnboardingInput,
   } from '@masl/shared';
+  import InterestPicker from './InterestPicker.svelte';
 
   interface Props {
     user: MeDto;
@@ -31,14 +32,6 @@
   const isComplete = $derived(
     gender !== null && selected.length >= INTERESTS_MIN && selected.length <= INTERESTS_MAX,
   );
-
-  function toggle(slug: string) {
-    if (selected.includes(slug)) {
-      selected = selected.filter((s) => s !== slug);
-    } else if (selected.length < INTERESTS_MAX) {
-      selected = [...selected, slug];
-    }
-  }
 
   async function submit() {
     const parsed = onboardingInput.safeParse({ gender, age, interests: selected });
@@ -97,29 +90,7 @@
     </select>
   </div>
 
-  <div class="space-y-3">
-    <div class="flex items-baseline justify-between">
-      <h2 class="text-sm tracking-widest text-gray-light uppercase">Интересы</h2>
-      <span class="text-sm text-gray-light">{selected.length} из {INTERESTS_MIN}–{INTERESTS_MAX}</span>
-    </div>
-    <div class="flex flex-wrap gap-2">
-      {#each interests as interest (interest.slug)}
-        {@const active = selected.includes(interest.slug)}
-        <button
-          type="button"
-          class="rounded-full border px-4 py-2 text-sm transition {active
-            ? 'border-brand bg-brand/20 text-paper'
-            : 'border-gray-dark bg-gray-dark/40 text-paper/90'}"
-          aria-pressed={active}
-          disabled={!active && selected.length >= INTERESTS_MAX}
-          onclick={() => toggle(interest.slug)}
-        >
-          {interest.emoji}
-          {interest.title}
-        </button>
-      {/each}
-    </div>
-  </div>
+  <InterestPicker {interests} bind:selected />
 
   {#if triedIncomplete && !isComplete}
     <p class="text-brand-light" role="alert">

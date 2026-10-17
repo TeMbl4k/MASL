@@ -54,6 +54,18 @@ class Session {
     }
   }
 
+  /** Calls the API with the session token, re-logging in once on 401 (see #withToken). */
+  authorized<T>(call: (token: string) => Promise<T>): Promise<T> {
+    return this.#withToken(call);
+  }
+
+  /** Replaces the current user after an API call returned a fresh profile (karma, interests). */
+  setUser(user: MeDto): void {
+    if (this.state.status === 'ready') {
+      this.state = { ...this.state, user };
+    }
+  }
+
   async completeOnboarding(input: OnboardingInput): Promise<void> {
     const user = await this.#withToken((token) => api.completeOnboarding(token, input));
     if (this.state.status === 'ready') {

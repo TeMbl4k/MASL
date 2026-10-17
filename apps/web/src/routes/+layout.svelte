@@ -2,8 +2,11 @@
   import './layout.css';
   import { onMount } from 'svelte';
   import favicon from '#lib/assets/favicon.svg';
+  import AppUpdated from '#lib/components/AppUpdated.svelte';
   import Onboarding from '#lib/components/Onboarding.svelte';
+  import Toasts from '#lib/components/Toasts.svelte';
   import { session } from '#lib/session.svelte.js';
+  import { toast } from '#lib/stores/toast.svelte.js';
   import { mountTelegramUi } from '#lib/tg/index.js';
   import { useBackController } from '#lib/tg/back.svelte.js';
   import type { LayoutProps } from './$types';
@@ -48,6 +51,10 @@
     interests={session.interests}
     onSubmit={(input) => session.completeOnboarding(input)}
   />
+{:else if toast.updateRequired}
+  <AppUpdated />
 {:else}
   {@render children()}
 {/if}
+
+<Toasts />

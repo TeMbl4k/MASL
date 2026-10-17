@@ -3,6 +3,8 @@
   import { preloadCode } from '$app/navigation';
   import { page } from '$app/state';
   import type { RouteId } from '$app/types';
+  import { warmMaplibre } from '#lib/map/maplibre.js';
+  import { myLobbies } from '#lib/stores/my-lobbies.svelte.js';
   import Calendar from './icons/Calendar.svelte';
   import Home from './icons/Home.svelte';
   import Pin from './icons/Pin.svelte';
@@ -25,7 +27,10 @@
       route: '/(tabs)/map',
       label: 'Карта',
       icon: Pin,
-      onwarm: () => void preloadCode('/(tabs)/map').catch(() => undefined),
+      onwarm: () => {
+        void preloadCode('/(tabs)/map').catch(() => undefined);
+        warmMaplibre();
+      },
     },
     { href: '/create', route: '/create', label: 'Создать встречу', icon: Plus },
     { href: '/my', route: '/(tabs)/my', label: 'Мои события', icon: Calendar },
@@ -51,9 +56,10 @@
             <Icon size={26} strokeWidth={2.2} />
           </a>
         {:else}
+          {@const dot = tab.route === '/(tabs)/my' && myLobbies.pendingTotal > 0}
           <a
             href={tab.href}
-            aria-label={tab.label}
+            aria-label={dot ? `${tab.label}, есть новые заявки` : tab.label}
             aria-current={active ? 'page' : undefined}
             ontouchstart={tab.onwarm}
             onmouseenter={tab.onwarm}
@@ -62,6 +68,14 @@
               : 'bg-gray-dark'}"
           >
             <Icon />
+            {#if dot}
+              <span
+                aria-hidden="true"
+                class="absolute top-1 right-1 size-2.5 rounded-full border-2 {active
+                  ? 'border-brand bg-paper'
+                  : 'border-gray-dark bg-brand'}"
+              ></span>
+            {/if}
           </a>
         {/if}
       </li>
