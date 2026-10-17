@@ -1,6 +1,6 @@
 import type { InterestDto, MeDto, OnboardingInput } from '@masl/shared';
 import { api, ApiError } from './api.js';
-import { initTelegram } from './telegram.js';
+import { initTelegram, type TelegramContext } from './telegram.js';
 
 type SessionState =
   | { status: 'loading' }
@@ -26,7 +26,12 @@ class Session {
   state = $state<SessionState>({ status: 'loading' });
   interests = $state<InterestDto[]>([]);
 
-  #telegram: { rawInitData: string | undefined } | undefined;
+  #telegram: TelegramContext | undefined;
+
+  /** Opened by a real Telegram client (not the dev mock): native buttons and popups exist. */
+  get inTelegram(): boolean {
+    return this.#telegram?.inTelegram ?? false;
+  }
 
   async start(): Promise<void> {
     this.state = { status: 'loading' };

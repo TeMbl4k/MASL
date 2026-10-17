@@ -1,34 +1,25 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { back } from '#lib/tg/back.svelte.js';
   import ChevronLeft from './icons/ChevronLeft.svelte';
 
   interface Props {
     title: string;
     subtitle?: string;
-    /** Show the in-page «Назад» link. */
-    back?: boolean;
     /** Right side of the header: an action or a pill. */
     right?: Snippet;
   }
 
-  let { title, subtitle, back = false, right }: Props = $props();
-
-  function goBack() {
-    if (history.length > 1) {
-      history.back();
-    } else {
-      void goto('/', { replace: true });
-    }
-  }
+  let { title, subtitle, right }: Props = $props();
 </script>
 
 <header class="flex flex-col gap-3 px-5 pt-5">
-  {#if back}
+  <!-- Telegram's own BackButton replaces this one when it is mounted. -->
+  {#if back.visible && !back.native}
     <button
       type="button"
       class="-ml-2 flex min-h-11 items-center gap-1 self-start px-2 text-gray-light"
-      onclick={goBack}
+      onclick={() => back.go()}
     >
       <ChevronLeft size={20} />
       Назад

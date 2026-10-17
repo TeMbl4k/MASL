@@ -4,12 +4,20 @@
   import favicon from '#lib/assets/favicon.svg';
   import Onboarding from '#lib/components/Onboarding.svelte';
   import { session } from '#lib/session.svelte.js';
+  import { mountTelegramUi } from '#lib/tg/index.js';
+  import { useBackController } from '#lib/tg/back.svelte.js';
   import type { LayoutProps } from './$types';
 
   let { children }: LayoutProps = $props();
 
+  useBackController();
+
   onMount(() => {
     void session.start();
+  });
+
+  $effect(() => {
+    if (session.state.status === 'ready') void mountTelegramUi();
   });
 </script>
 
