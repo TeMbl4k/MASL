@@ -1,4 +1,5 @@
 import {
+  APPEAL_RETRY_DAYS,
   ATTENDANCE_CLOSE_HOURS_AFTER,
   CHECK_IN_OPENS_MINUTES_BEFORE,
   DISTANCE_ROUND_M,
@@ -133,6 +134,11 @@ export function meetsMinKarma(karma: number, minKarma: number | null): boolean {
 /** Why a host can't create lobbies after a late cancel of a full one (stage 3 §10). */
 export const CREATION_BLOCKED_TITLE = 'Создание встреч заблокировано после отмены в последний час';
 export const CREATION_BLOCKED_APPEAL = 'Обжаловать можно будет позже';
+
+/** After a rejected appeal, the next one is allowed from this moment. */
+export function appealRetryAt(decidedAt: Instant): Date {
+  return new Date(asDate(decidedAt).getTime() + APPEAL_RETRY_DAYS * DAY_MS);
+}
 
 export const OUTSIDE_MOSCOW_MESSAGE = 'Пока работаем только в Москве';
 export const PLACE_TOO_FAR_MESSAGE = `Пока поддерживаем места не дальше ${PLACE_MAX_FROM_METRO_M / 1000} км от метро или МЦК`;

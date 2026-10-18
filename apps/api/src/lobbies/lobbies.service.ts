@@ -30,6 +30,7 @@ import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
 import { KarmaService, type DbTransaction } from '../karma/karma.service.js';
+import { creationBlock } from '../users/creation-block.js';
 import { resolveLobbyAccess } from './lobby-access.js';
 import { toExactPlace, toLobbyDetail, toPerson, membershipOf, type DetailAccess } from './lobby.mapper.js';
 import {
@@ -249,7 +250,7 @@ export class LobbiesService {
           if (applied !== null) karmaDelta = applied;
           await tx
             .update(users)
-            .set({ lobbyCreationBlocked: true, updatedAt: now })
+            .set({ ...creationBlock('late_cancel', now, lobbyId), updatedAt: now })
             .where(eq(users.id, viewerId));
         }
         await this.notifyCancelled(tx, lobbyId, now);

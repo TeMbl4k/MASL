@@ -8,10 +8,22 @@ import {
   LOBBY_MIN_KARMA_PRESETS,
   LOBBY_SLOTS_PRESETS,
 } from './constants.js';
-import { API_ERROR_CODES, LOBBY_ACCESS, LOBBY_CATEGORIES } from './enums.js';
+import {
+  API_ERROR_CODES,
+  CASE_DECISIONS,
+  LOBBY_ACCESS,
+  LOBBY_CATEGORIES,
+  MODERATION_CASE_KINDS,
+  MODERATION_DECISIONS,
+} from './enums.js';
 import { INTERESTS, INTEREST_SLUGS } from './interests.js';
 import {
+  adminCaseDto,
+  adminLobbyDto,
+  adminUserSearchQuery,
   apiErrorDto,
+  appealInput,
+  appealStateDto,
   applicantDto,
   attendanceInput,
   attendanceResponse,
@@ -33,7 +45,10 @@ import {
   originQuery,
   placeReverseInput,
   placeSuggestInput,
+  reportInput,
+  resolveCaseInput,
   updateInterestsInput,
+  userActionInput,
 } from './schemas.js';
 
 describe('onboardingInput', () => {
@@ -484,5 +499,110 @@ describe('response schemas fail closed', () => {
       ok(apiErrorDto, { statusCode: 500, code: 'internal_error', message: 'Внутренняя ошибка сервера' }),
     ).toBe(true);
     expect(API_ERROR_CODES).toHaveLength(new Set(API_ERROR_CODES).size);
+  });
+});
+
+describe('stage 4 inputs', () => {
+  it('reportInput takes a known reason and an optional comment up to 300 characters', () => {
+    expect(reportInput.parse({ reason: 'scam' })).toEqual({ reason: 'scam', comment: null });
+    expect(reportInput.parse({ reason: 'promo', comment: '  \n ' })).toEqual({
+      reason: 'promo',
+      comment: null,
+    });
+    expect(reportInput.parse({ reason: 'other', comment: 'Бронь\nпереводом' }).comment).toBe(
+      'Бронь\nпереводом',
+    );
+    expect(reportInput.safeParse({ reason: 'spam' }).success).toBe(false);
+    expect(reportInput.safeParse({ reason: 'abuse', comment: 'я'.repeat(301) }).success).toBe(false);
+    expect(reportInput.safeParse({ reason: 'abuse', comment: 'я'.repeat(300) }).success).toBe(true);
+  });
+
+  it('appealInput needs 20 to 1000 visible characters', () => {
+    expect(appealInput.safeParse({ text: 'Клуб отменил бронь.' }).success).toBe(false);
+    expect(appealInput.safeParse({ text: 'Клуб отменил бронь корта' }).success).toBe(true);
+    expect(appealInput.safeParse({ text: `${'\u200b'.repeat(30)}коротко` }).success).toBe(false);
+    expect(appealInput.safeParse({ text: 'а'.repeat(1001) }).success).toBe(false);
+    expect(appealInput.parse({ text: '  Клуб отменил бронь корта  ' }).text).toBe('Клуб отменил бронь корта');
+  });
+
+  it('resolveCaseInput defaults the options and needs a reason to reject an appeal', () => {
+    expect(resolveCaseInput.parse({ decision: 'reports_confirmed' })).toEqual({
+      decision: 'reports_confirmed',
+      comment: null,
+      cancelUpcoming: true,
+      blockCreation: false,
+      refundKarma: false,
+    });
+    expect(resolveCaseInput.safeParse({ decision: 'appeal_rejected' }).success).toBe(false);
+    expect(resolveCaseInput.safeParse({ decision: 'appeal_rejected', comment: '   ' }).success).toBe(false);
+    expect(
+      resolveCaseInput.safeParse({ decision: 'appeal_rejected', comment: 'Не подтвердилось' }).success,
+    ).toBe(true);
+    expect(resolveCaseInput.safeParse({ decision: 'ban_forever' }).success).toBe(false);
+  });
+
+  it('every decision belongs to exactly one case kind', () => {
+    const all = MODERATION_CASE_KINDS.flatMap((kind) => CASE_DECISIONS[kind]);
+    expect([...all].sort()).toEqual([...MODERATION_DECISIONS].sort());
+  });
+
+  it('userActionInput bounds a manual karma change and needs a comment for it', () => {
+    expect(userActionInput.parse({ action: 'shadow_ban' })).toEqual({
+      action: 'shadow_ban',
+      karmaDelta: null,
+      comment: null,
+    });
+    const change = { action: 'karma_change', comment: 'Помог с организацией' };
+    expect(userActionInput.safeParse({ ...change, karmaDelta: 50 }).success).toBe(true);
+    expect(userActionInput.safeParse({ ...change, karmaDelta: -50 }).success).toBe(true);
+    expect(userActionInput.safeParse({ ...change, karmaDelta: 51 }).success).toBe(false);
+    expect(userActionInput.safeParse({ ...change, karmaDelta: 0 }).success).toBe(false);
+    expect(userActionInput.safeParse({ ...change, karmaDelta: 2.5 }).success).toBe(false);
+    expect(userActionInput.safeParse({ action: 'karma_change', karmaDelta: 5 }).success).toBe(false);
+    expect(userActionInput.safeParse({ ...change }).success).toBe(false);
+    expect(userActionInput.safeParse({ action: 'cancel_lobby' }).success).toBe(false);
+  });
+
+  it('adminUserSearchQuery needs at least 2 visible characters', () => {
+    expect(adminUserSearchQuery.safeParse({ q: 'о' }).success).toBe(false);
+    expect(adminUserSearchQuery.parse({ q: ' @oleg ' })).toEqual({ q: '@oleg' });
+    expect(adminUserSearchQuery.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('stage 4 responses fail closed', () => {
+  const lobby = {
+    id: REQUEST_ID,
+    title: 'Бизнес-завтрак',
+    description: null,
+    category: 'networking',
+    startsAt: '2026-10-19T07:00:00.000Z',
+    endsAt: '2026-10-19T09:00:00.000Z',
+    status: 'open',
+    placeHint: 'м. Белорусская',
+    slots: 10,
+    approvedCount: 4,
+    cancelReason: null,
+    cancelledAt: null,
+    attendanceSavedAt: null,
+    hostedDelta: null,
+    members: [],
+  };
+
+  it('adminLobbyDto has no exact place', () => {
+    expect(ok(adminLobbyDto, lobby)).toBe(true);
+    expect(ok(adminLobbyDto, { ...lobby, address: 'CANARY-ул. Тестовая, 1' })).toBe(false);
+    expect(
+      ok(adminLobbyDto, { ...lobby, exactPlace: { address: 'x', point: { lat: 55.7, lng: 37.6 } } }),
+    ).toBe(false);
+    expect(ok(adminLobbyDto, { ...lobby, cancelReason: 'moderation' })).toBe(true);
+  });
+
+  it('appealStateDto and adminCaseDto stay strict', () => {
+    const state = { block: null, appeal: null, retryAt: null, canAppeal: false };
+    expect(ok(appealStateDto, state)).toBe(true);
+    expect(ok(appealStateDto, { ...state, moderatorId: REQUEST_ID })).toBe(false);
+    expect(adminCaseDto.shape.lobby.unwrap().shape).not.toHaveProperty('address');
+    expect(adminCaseDto.shape.lobby.unwrap().shape).not.toHaveProperty('location');
   });
 });

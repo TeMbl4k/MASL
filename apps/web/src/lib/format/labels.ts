@@ -17,7 +17,9 @@ export const KARMA_REASON_LABELS: Readonly<Record<KarmaReason, string>> = {
   no_show: 'Не пришли',
   host_late_cancel: 'Поздняя отмена встречи хостом',
   hosted: 'Провели встречу',
-  manual: 'Изменение модератором',
+  manual: 'Решение модерации',
+  moderation: 'Решение модерации',
+  appeal_refund: 'Возврат по апелляции',
 };
 
 export { LOBBY_CANCEL_REASON_LABELS } from '@masl/shared';

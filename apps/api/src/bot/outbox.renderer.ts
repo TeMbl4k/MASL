@@ -160,6 +160,7 @@ export class OutboxRenderer {
   ) {}
 
   async render(row: Notification): Promise<TelegramCall[] | null> {
+    if (row.lobbyId === null) return null;
     const lobby = await loadLobby(this.db, row.lobbyId);
     if (!lobby) return null;
     const status = effectiveLobbyStatus(lobby, this.clock.now());
