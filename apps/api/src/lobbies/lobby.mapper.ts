@@ -1,5 +1,5 @@
 import {
-  LOBBY_CANCEL_REASONS,
+  LOBBY_CANCEL_REASONS_OUT,
   attendanceDeadline,
   attendanceState,
   checkInOpensAt,
@@ -14,7 +14,7 @@ import {
   type ApplyBlockReason,
   type ExactPlaceDto,
   type LobbyAccess,
-  type LobbyCancelReason,
+  type LobbyCancelReasonOut,
   type LobbyCardDto,
   type LobbyChatDto,
   type LobbyDetailDto,
@@ -33,10 +33,10 @@ import type { ApplicantRow, DetailExtrasRow, LobbyCardRow, ViewerContext } from 
  * added to a query can't reach a response by accident (the strict schemas back this up).
  */
 
-const cancelReasonSchema = z.enum(LOBBY_CANCEL_REASONS).catch('other');
+const cancelReasonSchema = z.enum(LOBBY_CANCEL_REASONS_OUT).catch('other');
 
 /** Stored cancel_reason → a known code; garbage reads as 'other'. */
-export function parseCancelReason(value: string | null): LobbyCancelReason | null {
+export function parseCancelReason(value: string | null): LobbyCancelReasonOut | null {
   return value === null ? null : cancelReasonSchema.parse(value);
 }
 

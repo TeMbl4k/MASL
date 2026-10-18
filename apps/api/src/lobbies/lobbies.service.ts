@@ -1,5 +1,5 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gt, inArray, ne } from 'drizzle-orm';
 import { lobbies, lobbyMembers, users, type Database, type GeoPoint } from '@masl/db';
 import {
   HOSTED_UPCOMING_MAX,
@@ -257,6 +257,28 @@ export class LobbiesService {
       }
       return { lobby: await this.detailFor(tx, { lobbyId, viewerId, now }), karmaDelta };
     });
+  }
+
+  /**
+   * A moderator's cancel (stage 4): reason `moderation`, no host penalty, members and the group
+   * told as on a host cancel. The caller holds the host's and the lobby's locks; false when the
+   * lobby is gone, cancelled or started.
+   */
+  async cancelForModeration(tx: DbTransaction, lobbyId: string, now: Date): Promise<boolean> {
+    const cancelled = await tx
+      .update(lobbies)
+      .set({
+        status: 'cancelled',
+        cancelledAt: now,
+        cancelReason: 'moderation',
+        cancelComment: null,
+        updatedAt: now,
+      })
+      .where(and(eq(lobbies.id, lobbyId), ne(lobbies.status, 'cancelled'), gt(lobbies.startsAt, now)))
+      .returning({ id: lobbies.id });
+    if (cancelled.length === 0) return false;
+    await this.notifyCancelled(tx, lobbyId, now);
+    return true;
   }
 
   /**

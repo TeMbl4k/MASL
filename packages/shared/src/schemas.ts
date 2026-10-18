@@ -176,6 +176,9 @@ export const meDto = z.object({
   onboarded: z.boolean(),
   /** The bot may message the user privately (exact address, approvals, attendance). */
   botCanWrite: z.boolean(),
+  role: z.enum(USER_ROLES),
+  /** Open moderation cases; moderators and admins only. */
+  moderationQueue: z.number().int().nullable(),
 });
 export type MeDto = z.infer<typeof meDto>;
 
@@ -412,7 +415,7 @@ export type AttendanceSummaryDto = z.infer<typeof attendanceSummaryDto>;
 
 const lobbyDetailBase = lobbyCardDto.extend({
   description: z.string().nullable(),
-  cancelReason: z.enum(LOBBY_CANCEL_REASONS).nullable(),
+  cancelReason: z.enum(LOBBY_CANCEL_REASONS_OUT).nullable(),
   cancelComment: z.string().nullable(),
   /** Host, approved and attended members; null for everyone else (they see approvedCount). */
   members: z.array(personDto).nullable(),

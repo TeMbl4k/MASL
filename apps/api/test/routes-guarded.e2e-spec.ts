@@ -6,12 +6,13 @@ import { RESPONSE_SCHEMA } from '../src/contracts/response-schema.decorator.js';
 import { KarmaModule } from '../src/karma/karma.module.js';
 import { LobbiesModule } from '../src/lobbies/lobbies.module.js';
 import { ModerationModule } from '../src/moderation/moderation.module.js';
+import { ModeratorGuard } from '../src/moderation/moderator.guard.js';
 import { PlacesModule } from '../src/places/places.module.js';
 import { RATE_LIMIT_BUCKETS } from '../src/rate-limit/rate-limit.decorator.js';
 import { RateLimitGuard } from '../src/rate-limit/rate-limit.guard.js';
 import { AuthGuard } from '../src/session/auth.guard.js';
 import { UsersModule } from '../src/users/users.module.js';
-import { adminUrl, bootApp, type TestApp } from './helpers.js';
+import { adminUrl, authHeader, bootApp, type TestApp } from './helpers.js';
 
 /** The only routes open without a session (rule 11; GET /api/interests: decisions.md, Q12). */
 const PUBLIC_ROUTES = ['GET /api/health', 'POST /api/auth/telegram', 'GET /api/interests'];
@@ -129,6 +130,25 @@ describe.skipIf(!adminUrl)('every route is guarded (requires TEST_DATABASE_URL)'
         expect(guards.indexOf(AuthGuard), h.route).toBeGreaterThanOrEqual(0);
         expect(guards.indexOf(RateLimitGuard), h.route).toBeGreaterThan(guards.indexOf(AuthGuard));
       }
+    }
+  });
+
+  it('every /api/admin route runs ModeratorGuard after AuthGuard and refuses a plain user', async () => {
+    const user = await t.loginOnboarded();
+    const admin = collectHandlers(t).filter((h) => h.route.split(' ')[1]!.startsWith('/api/admin/'));
+    expect(admin.length).toBeGreaterThan(0);
+    for (const h of admin) {
+      expect(h.guards.indexOf(AuthGuard), h.route).toBeGreaterThanOrEqual(0);
+      expect(h.guards.indexOf(ModeratorGuard), h.route).toBeGreaterThan(h.guards.indexOf(AuthGuard));
+      const [method, pattern] = h.route.split(' ') as [string, string];
+      const response = await t.app.inject({
+        method: method as 'GET',
+        url: sampleUrl(pattern),
+        headers: authHeader(user.token),
+        payload: method === 'GET' ? undefined : {},
+      });
+      expect(response.statusCode, h.route).toBe(403);
+      expect(response.json(), h.route).toMatchObject({ code: 'forbidden_moderation' });
     }
   });
 

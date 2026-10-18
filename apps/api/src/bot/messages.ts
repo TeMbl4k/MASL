@@ -6,7 +6,7 @@ import {
   formatMoscow,
   formatMoscowTime,
   type Instant,
-  type LobbyCancelReason,
+  type LobbyCancelReasonOut,
 } from '@masl/shared';
 
 /**
@@ -86,7 +86,7 @@ export const texts = {
     ].join('\n'),
   memberRejected: (title: string) =>
     `Заявку на «${title}» не приняли. Загляните в ленту: там есть и другие встречи.`,
-  memberLobbyCancelled: (m: MeetupRef, reason: LobbyCancelReason | null, comment: string | null) =>
+  memberLobbyCancelled: (m: MeetupRef, reason: LobbyCancelReasonOut | null, comment: string | null) =>
     [
       `Встречу «${m.title}» (${formatMeetupWhen(m.startsAt, m.endsAt)}) отменили.`,
       reason ? `Причина: ${LOBBY_CANCEL_REASON_LABELS[reason]}.` : null,

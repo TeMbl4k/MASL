@@ -13,6 +13,8 @@ export interface KarmaChange {
   reason: KarmaReason;
   delta: number;
   now: Date;
+  /** Shown to the user with manual and moderation events. */
+  comment?: string | null;
 }
 
 /** Karma changes only through events: users.karma = KARMA.START + Σ karma_events.delta. */
@@ -43,6 +45,7 @@ export class KarmaService {
         lobbyId: change.lobbyId,
         reason: change.reason,
         delta,
+        comment: change.comment ?? null,
         createdAt: change.now,
       })
       .onConflictDoNothing()
