@@ -1,12 +1,12 @@
-import { Controller, Get, Inject, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, Inject, Post, UseGuards } from '@nestjs/common';
 import {
-  placeReverseQuery,
+  placeReverseInput,
   placeReverseResponse,
-  placeSuggestQuery,
+  placeSuggestInput,
   placeSuggestResponse,
-  type PlaceReverseQuery,
+  type PlaceReverseInput,
   type PlaceReverseResponse,
-  type PlaceSuggestQuery,
+  type PlaceSuggestInput,
   type PlaceSuggestResponse,
 } from '@masl/shared';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
@@ -16,30 +16,35 @@ import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
 import { AuthGuard, CurrentUserId } from '../session/auth.guard.js';
 import { PlacesService } from './places.service.js';
 
-/** Always 200: `enabled: false` without a DaData key, `degraded: true` when DaData failed. */
+/**
+ * Always 200: `enabled: false` without a DaData key, `degraded: true` when DaData failed.
+ * POST, so the typed address and the exact pin never appear in a URL.
+ */
 @Controller('places')
 @UseGuards(AuthGuard, RateLimitGuard)
 export class PlacesController {
   constructor(@Inject(PlacesService) private readonly places: PlacesService) {}
 
-  @Get('suggest')
+  @Post('suggest')
+  @HttpCode(200)
   @RateLimit('placeSuggest', 'placeSuggestDaily')
   @ResponseSchema(placeSuggestResponse)
   suggest(
     @CurrentUserId() userId: string,
-    @Query(new ZodValidationPipe(placeSuggestQuery)) query: PlaceSuggestQuery,
+    @Body(new ZodValidationPipe(placeSuggestInput)) body: PlaceSuggestInput,
   ): Promise<PlaceSuggestResponse> {
-    return this.places.suggest(userId, query.q);
+    return this.places.suggest(userId, body.q);
   }
 
-  @Get('reverse')
+  @Post('reverse')
+  @HttpCode(200)
   // Shares the daily bucket with suggest: both spend the one service-wide DaData budget.
   @RateLimit('placeReverse', 'placeSuggestDaily')
   @ResponseSchema(placeReverseResponse)
   reverse(
     @CurrentUserId() userId: string,
-    @Query(new ZodValidationPipe(placeReverseQuery)) query: PlaceReverseQuery,
+    @Body(new ZodValidationPipe(placeReverseInput)) body: PlaceReverseInput,
   ): Promise<PlaceReverseResponse> {
-    return this.places.reverse(userId, { lat: query.lat, lng: query.lng });
+    return this.places.reverse(userId, { lat: body.lat, lng: body.lng });
   }
 }

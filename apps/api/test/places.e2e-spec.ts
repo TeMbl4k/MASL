@@ -21,6 +21,21 @@ async function bootCapturingLogs(env?: Record<string, string>) {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+const suggestRequest = (t: TestApp, token: string, payload: unknown) =>
+  t.app.inject({
+    method: 'POST',
+    url: '/api/places/suggest',
+    headers: authHeader(token),
+    payload: payload as object,
+  });
+const reverseRequest = (t: TestApp, token: string, payload: unknown) =>
+  t.app.inject({
+    method: 'POST',
+    url: '/api/places/reverse',
+    headers: authHeader(token),
+    payload: payload as object,
+  });
+
 describe.skipIf(!adminUrl)('places e2e without a DaData key (requires TEST_DATABASE_URL)', () => {
   let t: TestApp;
   let startupLogs: string[];
@@ -41,15 +56,9 @@ describe.skipIf(!adminUrl)('places e2e without a DaData key (requires TEST_DATAB
     t.resetRateLimits();
   });
 
-  const suggest = (token: string, q: string) =>
-    t.app.inject({
-      method: 'GET',
-      url: `/api/places/suggest?q=${encodeURIComponent(q)}`,
-      headers: authHeader(token),
-    });
-  const reverse = (token: string, query: string) =>
-    t.app.inject({ method: 'GET', url: `/api/places/reverse?${query}`, headers: authHeader(token) });
-  const canaryQuery = `lat=${CANARY_POINT.lat}&lng=${CANARY_POINT.lng}`;
+  const suggest = (token: string, q: string) => suggestRequest(t, token, { q });
+  const reverse = (token: string, point: unknown) => reverseRequest(t, token, point);
+  const canaryPoint = { ...CANARY_POINT };
 
   it('says on startup that address suggestions are off', () => {
     expect(startupLogs.join('\n')).toContain('Подсказки адресов DaData выключены: DADATA_API_KEY не задан');
@@ -64,7 +73,7 @@ describe.skipIf(!adminUrl)('places e2e without a DaData key (requires TEST_DATAB
     expect(s.json()).toEqual({ enabled: false, degraded: false, items: [] });
     expect(placeSuggestResponse.safeParse(s.json()).success).toBe(true);
 
-    const r = await reverse(user.token, canaryQuery);
+    const r = await reverse(user.token, canaryPoint);
     expect(r.statusCode).toBe(200);
     expect(r.headers['cache-control']).toBe('private, no-store');
     expect(r.json()).toEqual({ enabled: false, degraded: false, address: null });
@@ -80,28 +89,42 @@ describe.skipIf(!adminUrl)('places e2e without a DaData key (requires TEST_DATAB
       expect(response.statusCode, q).toBe(400);
       expect(response.json()).toMatchObject({ message: 'Некорректные данные' });
     }
-    const missing = await t.app.inject({
-      method: 'GET',
-      url: '/api/places/suggest',
-      headers: authHeader(user.token),
-    });
+    const missing = await suggestRequest(t, user.token, {});
     expect(missing.statusCode).toBe(400);
+  });
+
+  it('takes the address and the pin only in a POST body: the GET routes are gone', async () => {
+    const user = await t.loginOnboarded();
+    for (const url of [
+      `/api/places/suggest?q=${encodeURIComponent('Тверская 1')}`,
+      `/api/places/reverse?lat=${CANARY_POINT.lat}&lng=${CANARY_POINT.lng}`,
+    ]) {
+      const response = await t.app.inject({ method: 'GET', url, headers: authHeader(user.token) });
+      expect(response.statusCode, url).toBe(404);
+    }
+    const queryOnly = await t.app.inject({
+      method: 'POST',
+      url: `/api/places/reverse?lat=${CANARY_POINT.lat}&lng=${CANARY_POINT.lng}`,
+      headers: authHeader(user.token),
+      payload: {},
+    });
+    expect(queryOnly.statusCode).toBe(400);
   });
 
   it('validates the reverse point: Moscow only, both numbers', async () => {
     const user = await t.loginOnboarded();
-    for (const query of [
-      'lat=59.9358&lng=30.326', // St Petersburg
-      'lat=55.75',
-      'lng=37.6',
-      'lat=abc&lng=37.6',
-      'lat=&lng=',
-      'lat=55.75&lng=37.6&lat=55.76',
+    for (const point of [
+      { lat: 59.9358, lng: 30.326 }, // St Petersburg
+      { lat: 55.75 },
+      { lng: 37.6 },
+      { lat: 'abc', lng: 37.6 },
+      { lat: '55.75', lng: '37.6' },
+      { lat: null, lng: null },
     ]) {
-      const response = await reverse(user.token, query);
-      expect(response.statusCode, query).toBe(400);
+      const response = await reverse(user.token, point);
+      expect(response.statusCode, JSON.stringify(point)).toBe(400);
       // The error never echoes the coordinates back.
-      expect(response.body, query).not.toContain('59.9358');
+      expect(response.body).not.toContain('59.9358');
     }
   });
 
@@ -109,7 +132,7 @@ describe.skipIf(!adminUrl)('places e2e without a DaData key (requires TEST_DATAB
     const user = await t.login();
     for (const response of [
       await suggest(user.token, 'Тверская 1'),
-      await reverse(user.token, canaryQuery),
+      await reverse(user.token, canaryPoint),
     ]) {
       expect(response.statusCode).toBe(403);
       expect(response.json()).toEqual({
@@ -139,9 +162,9 @@ describe.skipIf(!adminUrl)('places e2e without a DaData key (requires TEST_DATAB
   it(`limits reverse to ${RATE_LIMITS.placeReverse.limit} a minute per user`, async () => {
     const user = await t.loginOnboarded();
     for (let i = 0; i < RATE_LIMITS.placeReverse.limit; i++) {
-      expect((await reverse(user.token, canaryQuery)).statusCode).toBe(200);
+      expect((await reverse(user.token, canaryPoint)).statusCode).toBe(200);
     }
-    const limited = await reverse(user.token, canaryQuery);
+    const limited = await reverse(user.token, canaryPoint);
     expect(limited.statusCode).toBe(429);
     expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
   });
@@ -164,15 +187,15 @@ describe.skipIf(!adminUrl)('places e2e without a DaData key (requires TEST_DATAB
         Date.now(),
       );
     }
-    expect((await reverse(user.token, canaryQuery)).statusCode).toBe(200);
+    expect((await reverse(user.token, canaryPoint)).statusCode).toBe(200);
 
-    for (const limited of [await reverse(user.token, canaryQuery), await suggest(user.token, 'Тверская 1')]) {
+    for (const limited of [await reverse(user.token, canaryPoint), await suggest(user.token, 'Тверская 1')]) {
       expect(limited.statusCode).toBe(429);
       expect(limited.json()).toMatchObject({ code: 'rate_limited' });
       // The daily window, not the per-minute one, refused it.
       expect(Number(limited.headers['retry-after'])).toBeGreaterThan(RATE_LIMITS.placeReverse.windowSeconds);
     }
-    expect((await reverse(other.token, canaryQuery)).statusCode).toBe(200);
+    expect((await reverse(other.token, canaryPoint)).statusCode).toBe(200);
   });
 });
 
@@ -230,11 +253,7 @@ describe.skipIf(!adminUrl)('places e2e with a DaData key (requires TEST_DATABASE
 
   it('proxies suggestions; the key goes only to DaData, never to the client', async () => {
     const user = await t.loginOnboarded();
-    const response = await t.app.inject({
-      method: 'GET',
-      url: `/api/places/suggest?q=${encodeURIComponent('Ленинградский 36')}`,
-      headers: authHeader(user.token),
-    });
+    const response = await suggestRequest(t, user.token, { q: 'Ленинградский 36' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       enabled: true,
@@ -259,11 +278,7 @@ describe.skipIf(!adminUrl)('places e2e with a DaData key (requires TEST_DATABASE
 
   it('reverse-geocodes the pin', async () => {
     const user = await t.loginOnboarded();
-    const response = await t.app.inject({
-      method: 'GET',
-      url: `/api/places/reverse?lat=${CANARY_POINT.lat}&lng=${CANARY_POINT.lng}`,
-      headers: authHeader(user.token),
-    });
+    const response = await reverseRequest(t, user.token, CANARY_POINT);
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ enabled: true, degraded: false, address: 'Ленинградский пр-кт, д 36' });
   });
@@ -271,18 +286,8 @@ describe.skipIf(!adminUrl)('places e2e with a DaData key (requires TEST_DATABASE
   it("one user's searches never warm another user's cache (no probing of exact places)", async () => {
     const a = await t.loginOnboarded();
     const b = await t.loginOnboarded();
-    const suggest = (token: string, q: string) =>
-      t.app.inject({
-        method: 'GET',
-        url: `/api/places/suggest?q=${encodeURIComponent(q)}`,
-        headers: authHeader(token),
-      });
-    const reverse = (token: string) =>
-      t.app.inject({
-        method: 'GET',
-        url: `/api/places/reverse?lat=${CANARY_POINT.lat}&lng=${CANARY_POINT.lng}`,
-        headers: authHeader(token),
-      });
+    const suggest = (token: string, q: string) => suggestRequest(t, token, { q });
+    const reverse = (token: string) => reverseRequest(t, token, CANARY_POINT);
 
     expect((await suggest(a.token, 'Новая Башиловка 14')).statusCode).toBe(200);
     expect((await reverse(a.token)).statusCode).toBe(200);
@@ -299,11 +304,7 @@ describe.skipIf(!adminUrl)('places e2e with a DaData key (requires TEST_DATABASE
 
   it('T-ABUSE-7 (places part): not onboarded → 403 before any upstream call', async () => {
     const user = await t.login();
-    const response = await t.app.inject({
-      method: 'GET',
-      url: `/api/places/suggest?q=${encodeURIComponent('Тверская 1')}`,
-      headers: authHeader(user.token),
-    });
+    const response = await suggestRequest(t, user.token, { q: 'Тверская 1' });
     expect(response.statusCode).toBe(403);
     expect(response.json()).toMatchObject({ code: 'not_onboarded' });
     expect(upstream).not.toHaveBeenCalled();
@@ -311,8 +312,9 @@ describe.skipIf(!adminUrl)('places e2e with a DaData key (requires TEST_DATABASE
 
   it('no token → 401 and no upstream call', async () => {
     const response = await t.app.inject({
-      method: 'GET',
-      url: `/api/places/suggest?q=${encodeURIComponent('Тверская')}`,
+      method: 'POST',
+      url: '/api/places/suggest',
+      payload: { q: 'Тверская' },
     });
     expect(response.statusCode).toBe(401);
     expect(upstream).not.toHaveBeenCalled();
@@ -325,11 +327,7 @@ describe.skipIf(!adminUrl)('places e2e with a DaData key (requires TEST_DATABASE
       vi.spyOn(Logger.prototype, level).mockImplementation(() => {}),
     );
     failNextWith = 401;
-    const response = await t.app.inject({
-      method: 'GET',
-      url: `/api/places/suggest?q=${encodeURIComponent('Беговая 5')}`,
-      headers: authHeader(user.token),
-    });
+    const response = await suggestRequest(t, user.token, { q: 'Беговая 5' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ enabled: true, degraded: true, items: [] });
     expect(response.body).not.toContain(KEY);

@@ -252,16 +252,16 @@ export const mapQuery = z.object({
 });
 export type MapQuery = z.infer<typeof mapQuery>;
 
-/** GET /places/suggest */
-export const placeSuggestQuery = z.object({ q: singleLine(PLACE_QUERY_MIN, PLACE_QUERY_MAX) });
-export type PlaceSuggestQuery = z.infer<typeof placeSuggestQuery>;
+// The places endpoints are POST: the typed address and the exact pin stay out of URLs,
+// which access logs in front of the app record.
 
-/** GET /places/reverse — the exact pin, so it is not rounded. */
-export const placeReverseQuery = z.object({
-  lat: z.coerce.number().pipe(lat),
-  lng: z.coerce.number().pipe(lng),
-});
-export type PlaceReverseQuery = z.infer<typeof placeReverseQuery>;
+/** POST /places/suggest */
+export const placeSuggestInput = z.object({ q: singleLine(PLACE_QUERY_MIN, PLACE_QUERY_MAX) });
+export type PlaceSuggestInput = z.infer<typeof placeSuggestInput>;
+
+/** POST /places/reverse — the exact pin; the server rounds it before calling DaData. */
+export const placeReverseInput = z.object({ lat, lng });
+export type PlaceReverseInput = z.infer<typeof placeReverseInput>;
 
 // Responses are strict objects: an unexpected field (an exact address) fails closed.
 
@@ -440,7 +440,7 @@ export type KarmaEventsResponse = z.infer<typeof karmaEventsResponse>;
 export const placeSuggestionDto = z.strictObject({ value: z.string(), point: geoPointDto.nullable() });
 export type PlaceSuggestionDto = z.infer<typeof placeSuggestionDto>;
 
-/** GET /places/suggest — `enabled` false without a DaData key, `degraded` when DaData failed. */
+/** POST /places/suggest — `enabled` false without a DaData key, `degraded` when DaData failed. */
 export const placeSuggestResponse = z.strictObject({
   enabled: z.boolean(),
   degraded: z.boolean(),
@@ -448,7 +448,7 @@ export const placeSuggestResponse = z.strictObject({
 });
 export type PlaceSuggestResponse = z.infer<typeof placeSuggestResponse>;
 
-/** GET /places/reverse */
+/** POST /places/reverse */
 export const placeReverseResponse = z.strictObject({
   enabled: z.boolean(),
   degraded: z.boolean(),

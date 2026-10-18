@@ -148,11 +148,20 @@ export const api = {
   karmaEvents: (token: string) => parsed(karmaEventsResponse, request('/me/karma-events', { token })),
   updateInterests: (token: string, interests: string[]) =>
     parsed(meDto, request('/me/interests', { method: 'PUT', token, body: JSON.stringify({ interests }) })),
+  // POST: the typed address and the exact pin stay out of URLs and so out of access logs.
   placeSuggest: (token: string, q: string, signal?: AbortSignal) =>
-    parsed(placeSuggestResponse, request(`/places/suggest${qs({ q })}`, { token, signal })),
+    parsed(
+      placeSuggestResponse,
+      request('/places/suggest', { method: 'POST', token, signal, body: JSON.stringify({ q }) }),
+    ),
   placeReverse: (token: string, point: GeoPointDto, signal?: AbortSignal) =>
     parsed(
       placeReverseResponse,
-      request(`/places/reverse${qs({ lat: point.lat, lng: point.lng })}`, { token, signal }),
+      request('/places/reverse', {
+        method: 'POST',
+        token,
+        signal,
+        body: JSON.stringify({ lat: point.lat, lng: point.lng }),
+      }),
     ),
 };

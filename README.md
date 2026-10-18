@@ -100,5 +100,5 @@ drizzle-kit берёт пользовательский тип в кавычки
 | GET    | `/api/lobbies/:id/applications`                        | Хост: список заявок и участников                                               |
 | POST   | `/api/lobbies/:id/applications/:applicationId/approve` | Хост одобряет заявку                                                           |
 | POST   | `/api/lobbies/:id/applications/:applicationId/reject`  | Хост отклоняет заявку                                                          |
-| GET    | `/api/places/suggest`                                  | Подсказки адресов DaData (если задан `DADATA_API_KEY`)                         |
-| GET    | `/api/places/reverse`                                  | Адрес по точке на карте через DaData                                           |
+| POST   | `/api/places/suggest`                                  | Подсказки адресов DaData (если задан `DADATA_API_KEY`)                         |
+| POST   | `/api/places/reverse`                                  | Адрес по точке на карте через DaData                                           |

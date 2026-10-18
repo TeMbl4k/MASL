@@ -28,8 +28,8 @@ import {
   myLobbiesResponse,
   onboardingInput,
   originQuery,
-  placeReverseQuery,
-  placeSuggestQuery,
+  placeReverseInput,
+  placeSuggestInput,
   updateInterestsInput,
 } from './schemas.js';
 
@@ -305,17 +305,18 @@ describe('query schemas', () => {
     expect(ok(mapQuery, { day: '0000-01-01' })).toBe(false);
   });
 
-  it('placeSuggestQuery and placeReverseQuery validate their input', () => {
-    expect(placeSuggestQuery.parse({ q: '  Тверская  1 ' })).toEqual({ q: 'Тверская 1' });
-    expect(ok(placeSuggestQuery, { q: 'Тв' })).toBe(false);
-    expect(ok(placeSuggestQuery, { q: 'а'.repeat(500) })).toBe(false);
-    expect(ok(placeSuggestQuery, { q: ch(0x200d).repeat(3) })).toBe(false);
-    expect(placeReverseQuery.parse({ lat: '55.789712', lng: '37.558249' })).toEqual({
+  it('placeSuggestInput and placeReverseInput validate their input', () => {
+    expect(placeSuggestInput.parse({ q: '  Тверская  1 ' })).toEqual({ q: 'Тверская 1' });
+    expect(ok(placeSuggestInput, { q: 'Тв' })).toBe(false);
+    expect(ok(placeSuggestInput, { q: 'а'.repeat(500) })).toBe(false);
+    expect(ok(placeSuggestInput, { q: ch(0x200d).repeat(3) })).toBe(false);
+    expect(placeReverseInput.parse({ lat: 55.789712, lng: 37.558249 })).toEqual({
       lat: 55.789712,
       lng: 37.558249,
     });
-    expect(ok(placeReverseQuery, { lat: '59.93', lng: '30.31' })).toBe(false);
-    expect(ok(placeReverseQuery, {})).toBe(false);
+    expect(ok(placeReverseInput, { lat: '55.789712', lng: '37.558249' })).toBe(false);
+    expect(ok(placeReverseInput, { lat: 59.93, lng: 30.31 })).toBe(false);
+    expect(ok(placeReverseInput, {})).toBe(false);
   });
 
   it('idParam accepts only UUIDs', () => {
