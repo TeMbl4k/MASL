@@ -30,6 +30,7 @@ services:
       BOT_TOKEN: ${BOT_TOKEN:?задайте BOT_TOKEN в deploy/.env}
       JWT_SECRET: ${JWT_SECRET:?задайте JWT_SECRET в deploy/.env}
       DADATA_API_KEY: ${DADATA_API_KEY:-}
+      ADMIN_TELEGRAM_IDS: ${ADMIN_TELEGRAM_IDS:-}
     depends_on:
       db:
         condition: service_healthy

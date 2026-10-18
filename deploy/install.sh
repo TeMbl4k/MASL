@@ -66,12 +66,18 @@ if [ ! -f "$ENV_FILE" ]; then
     [[ "$bot_token" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] && break
     echo "Токен выглядит как 123456789:AA..., попробуйте ещё раз"
   done
+  while true; do
+    read -r -p "Ваш Telegram ID для админки, его подскажет @userinfobot (Enter — пропустить): " admin_id </dev/tty
+    [ -z "$admin_id" ] || [[ "$admin_id" =~ ^[1-9][0-9]{0,14}$ ]] && break
+    echo "Telegram ID состоит только из цифр, например 123456789"
+  done
   umask 077
   cat >"$ENV_FILE" <<ENV
 DOMAIN=$domain
 BOT_TOKEN=$bot_token
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 JWT_SECRET=$(openssl rand -hex 32)
+ADMIN_TELEGRAM_IDS=$admin_id
 ENV
   echo "Сохранено в $ENV_FILE"
 else

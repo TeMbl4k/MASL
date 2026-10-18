@@ -43,6 +43,20 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...base, DADATA_API_KEY: 'a1b2c3d4e5' }).DADATA_API_KEY).toBe('a1b2c3d4e5');
   });
 
+  it('ADMIN_TELEGRAM_IDS is an optional list of Telegram ids', () => {
+    expect(loadEnv(base).ADMIN_TELEGRAM_IDS).toEqual([]);
+    expect(loadEnv({ ...base, ADMIN_TELEGRAM_IDS: ' ' }).ADMIN_TELEGRAM_IDS).toEqual([]);
+    expect(loadEnv({ ...base, ADMIN_TELEGRAM_IDS: '123456789' }).ADMIN_TELEGRAM_IDS).toEqual([123456789]);
+    expect(loadEnv({ ...base, ADMIN_TELEGRAM_IDS: '5512093417, 42' }).ADMIN_TELEGRAM_IDS).toEqual([
+      5512093417, 42,
+    ]);
+    for (const value of ['@oleg', '12,,34', '-5', '0', '1.5', '1234567890123456']) {
+      expect(() => loadEnv({ ...base, ADMIN_TELEGRAM_IDS: value }), value).toThrow(
+        /ADMIN_TELEGRAM_IDS.*числовые Telegram ID/,
+      );
+    }
+  });
+
   it('refuses a placeholder DADATA_API_KEY without echoing the value', () => {
     const value = 'replace-with-dadata-key';
     let error: unknown;

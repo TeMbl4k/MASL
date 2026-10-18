@@ -48,6 +48,26 @@ const webOrigins = z.preprocess(
     .optional(),
 );
 
+/** Telegram user ids, comma-separated; empty means nobody. */
+const telegramIds = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  z
+    .string()
+    .transform((value) => value.split(',').map((item) => item.trim()))
+    .pipe(
+      z.array(
+        z
+          .string()
+          .regex(
+            /^[1-9]\d{0,14}$/,
+            'перечислите числовые Telegram ID через запятую, например 123456789,987654321',
+          )
+          .transform(Number),
+      ),
+    )
+    .optional(),
+);
+
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -94,6 +114,11 @@ export const envSchema = z
         )
         .optional(),
     ),
+    /**
+     * Telegram ids of the admins: they appoint moderators and moderate themselves. Optional;
+     * without it moderation works only for users marked is_moderator in the database.
+     */
+    ADMIN_TELEGRAM_IDS: telegramIds,
     /** Mini App build directory, if it is not apps/web/build. */
     WEB_DIST_DIR: z.preprocess(
       (value) => (value === '' ? undefined : value),
@@ -103,7 +128,11 @@ export const envSchema = z
         .optional(),
     ),
   })
-  .transform(({ WEB_ORIGINS, ...env }) => ({ ...env, WEB_ORIGINS: WEB_ORIGINS ?? [] }));
+  .transform(({ WEB_ORIGINS, ADMIN_TELEGRAM_IDS, ...env }) => ({
+    ...env,
+    WEB_ORIGINS: WEB_ORIGINS ?? [],
+    ADMIN_TELEGRAM_IDS: ADMIN_TELEGRAM_IDS ?? [],
+  }));
 
 export type Env = z.infer<typeof envSchema>;
 
