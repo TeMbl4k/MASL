@@ -433,6 +433,8 @@ export const myLobbiesResponse = z.strictObject({
   joined: lobbyBucketDto,
   /** Profile numbers: hosted lobbies that are not cancelled, memberships in occupying statuses. */
   counts: z.strictObject({ hosted: z.number().int(), joined: z.number().int() }),
+  /** Hosted lobbies whose members still wait for the host's attendance marks. */
+  attendanceDue: z.array(z.uuid()),
 });
 export type MyLobbiesResponse = z.infer<typeof myLobbiesResponse>;
 
@@ -460,7 +462,12 @@ export const cancelLobbyResponse = z.strictObject({
 export type CancelLobbyResponse = z.infer<typeof cancelLobbyResponse>;
 
 /** POST /lobbies/:id/chat/prepare — the id for WebApp.requestChat; null when the bot sent the button. */
-export const chatPrepareResponse = z.strictObject({ preparedButtonId: z.string().nullable() });
+export const chatPrepareResponse = z.strictObject({
+  /** For WebApp.requestChat (`via: 'app'`); null when the bot sent the button to its chat. */
+  preparedButtonId: z.string().nullable(),
+  /** The bot's private chat (https://t.me/<username>), where the `bot` button waits. */
+  botLink: z.url(),
+});
 export type ChatPrepareResponse = z.infer<typeof chatPrepareResponse>;
 
 /** DELETE /lobbies/:id/applications/me */

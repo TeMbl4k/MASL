@@ -110,14 +110,17 @@ export class ChatService {
       },
     } satisfies KeyboardButton.RequestChatButton;
     try {
+      // Fetches getMe once if polling hasn't started yet.
+      await this.bot.init();
+      const botLink = `https://t.me/${this.bot.botInfo.username}`;
       if (input.via === 'app') {
         const prepared = await this.bot.api.savePreparedKeyboardButton(telegramId, button);
-        return { preparedButtonId: prepared.id };
+        return { preparedButtonId: prepared.id, botLink };
       }
       await this.bot.api.sendMessage(telegramId, texts.chatPickerPrompt, {
         reply_markup: { keyboard: [[button]], one_time_keyboard: true, resize_keyboard: true },
       });
-      return { preparedButtonId: null };
+      return { preparedButtonId: null, botLink };
     } catch (error) {
       this.log.warn(`Бот: кнопка выбора группы не создана: ${describeTelegramError(error)}`);
       throw apiError('bot_unavailable');

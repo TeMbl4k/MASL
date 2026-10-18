@@ -102,7 +102,7 @@ describe.skipIf(!adminUrl)('meetup chat e2e (requires TEST_DATABASE_URL)', () =>
     it('sends the picker in the bot chat when asked', async () => {
       const { host, lobby } = await fixture();
       const response = await api.prepareChat(host.token, lobby.id, { via: 'bot' });
-      expect(response.json()).toEqual({ preparedButtonId: null });
+      expect(response.json()).toEqual({ preparedButtonId: null, botLink: 'https://t.me/masl_test_bot' });
       const [call] = t.telegram.sent('sendMessage', host.user.telegramId);
       expect(call?.payload.reply_markup).toMatchObject({
         keyboard: [[{ request_chat: { bot_is_member: true } }]],

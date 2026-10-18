@@ -461,9 +461,14 @@ describe('response schemas fail closed', () => {
       true,
     );
     const bucket = { upcoming: [card], past: [] };
-    expect(ok(myLobbiesResponse, { hosting: bucket, joined: bucket, counts: { hosted: 1, joined: 0 } })).toBe(
-      true,
-    );
+    expect(
+      ok(myLobbiesResponse, {
+        hosting: bucket,
+        joined: bucket,
+        counts: { hosted: 1, joined: 0 },
+        attendanceDue: [],
+      }),
+    ).toBe(true);
   });
 
   it('describes error bodies by code', () => {

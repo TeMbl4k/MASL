@@ -776,6 +776,7 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
         hosting: { upcoming: [], past: [] },
         joined: { upcoming: [], past: [] },
         counts: { hosted: 0, joined: 0 },
+        attendanceDue: [],
       });
       const own = await mine(a.token);
       expect(idsOf(own.hosting.upcoming)).toEqual([hosted.id]);

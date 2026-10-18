@@ -1,4 +1,19 @@
-import { and, asc, count, eq, gt, inArray, isNotNull, isNull, ne, not, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  not,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { alias, type AnyPgColumn, type AnyPgTable } from 'drizzle-orm/pg-core';
 import {
   applicationEvents,
@@ -15,6 +30,7 @@ import {
 import {
   APP_TIME_ZONE,
   APPLICATIONS_WINDOW_HOURS,
+  ATTENDANCE_CLOSE_HOURS_AFTER,
   FEED_RANKING,
   FEED_SOON_HOURS,
   HOUR_MS,
@@ -656,3 +672,23 @@ export async function loadDetailExtras(db: Executor, lobbyId: string, viewerId: 
 }
 
 export type DetailExtrasRow = NonNullable<Awaited<ReturnType<typeof loadDetailExtras>>>;
+
+/** Hosted lobbies that ended and still wait for the host's attendance marks. */
+export async function loadAttendanceDue(db: Executor, hostId: string, now: Date): Promise<string[]> {
+  const rows = await db
+    .select({ id: lobbies.id })
+    .from(lobbies)
+    .where(
+      and(
+        eq(lobbies.hostId, hostId),
+        ne(lobbies.status, 'cancelled'),
+        lte(lobbies.endsAt, now),
+        gt(lobbies.endsAt, new Date(now.getTime() - ATTENDANCE_CLOSE_HOURS_AFTER * HOUR_MS)),
+        isNull(lobbies.attendanceSavedAt),
+        isNull(lobbies.attendanceClosedAt),
+        sql`${approvedCountSql} > 0`,
+      ),
+    )
+    .orderBy(asc(lobbies.endsAt), asc(lobbies.id));
+  return rows.map((r) => r.id);
+}

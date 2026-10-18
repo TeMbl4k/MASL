@@ -1,10 +1,17 @@
 import { and, eq } from 'drizzle-orm';
 import { lobbies, lobbyFeedback, lobbyMembers, notifications, users } from '@masl/db';
-import { KARMA, attendanceResponse, lobbyDetailDto, type AttendanceResponse } from '@masl/shared';
+import {
+  KARMA,
+  attendanceResponse,
+  lobbyDetailDto,
+  myLobbiesResponse,
+  type AttendanceResponse,
+} from '@masl/shared';
 import { LobbyStatusSweeper } from '../src/lobbies/lobby-status.sweeper.js';
 import {
   CANARY_POINT,
   adminUrl,
+  authHeader,
   bootApp,
   freshChatId,
   insertLobby,
@@ -223,6 +230,20 @@ describe.skipIf(!adminUrl)('check-in, attendance and feedback e2e (requires TEST
 
       const detail = lobbyDetailDto.parse((await api.detail(host.token, lobby.id)).json());
       expect(detail.attendance?.state).toBe('saved');
+    });
+
+    it("lists the lobby in the host's «Мои» until the marks are saved", async () => {
+      const { host, lobby, members } = await meetup({ startsInMin: -150 });
+      const empty = await meetup({ startsInMin: -150, members: 0 });
+      const due = async (token: string) =>
+        myLobbiesResponse.parse(
+          (await t.app.inject({ method: 'GET', url: '/api/me/lobbies', headers: authHeader(token) })).json(),
+        ).attendanceDue;
+      expect(await due(host.token)).toEqual([lobby.id]);
+      expect(await due(empty.host.token)).toEqual([]);
+      expect(await due(members[0]!.token)).toEqual([]);
+      await api.saveAttendance(host.token, lobby.id, []);
+      expect(await due(host.token)).toEqual([]);
     });
 
     it('gives the host nothing when nobody came; parallel saves count once', async () => {

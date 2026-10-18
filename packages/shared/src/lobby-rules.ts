@@ -120,10 +120,19 @@ export function attendanceState(
   return asDate(now).getTime() < attendanceDeadline(lobby.endsAt).getTime() ? 'open' : 'closed';
 }
 
+/** The attendance save button, in the app and in the bot's poll. */
+export function attendanceSaveLabel(present: number, absent: number): string {
+  return `Сохранить: на встрече ${present}, не было ${absent}`;
+}
+
 /** Inclusive karma threshold; no threshold lets everyone in. */
 export function meetsMinKarma(karma: number, minKarma: number | null): boolean {
   return minKarma === null || karma >= minKarma;
 }
+
+/** Why a host can't create lobbies after a late cancel of a full one (stage 3 §10). */
+export const CREATION_BLOCKED_TITLE = 'Создание встреч заблокировано после отмены в последний час';
+export const CREATION_BLOCKED_APPEAL = 'Обжаловать можно будет позже';
 
 export const OUTSIDE_MOSCOW_MESSAGE = 'Пока работаем только в Москве';
 export const PLACE_TOO_FAR_MESSAGE = `Пока поддерживаем места не дальше ${PLACE_MAX_FROM_METRO_M / 1000} км от метро или МЦК`;

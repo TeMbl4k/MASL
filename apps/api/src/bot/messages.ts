@@ -2,6 +2,7 @@ import {
   KARMA,
   LATE_CANCEL_WINDOW_HOURS,
   LOBBY_CANCEL_REASON_LABELS,
+  attendanceSaveLabel,
   formatMoscow,
   formatMoscowTime,
   type Instant,
@@ -104,7 +105,7 @@ export const texts = {
         : 'Нажмите на тех, кого не было, и сохраните. Отметившихся на месте отметить отсутствующими нельзя.',
       `Пришедшим ${signed(KARMA.ATTENDED)} к карме, не пришедшим ${signed(KARMA.NO_SHOW)}, вам ${signed(KARMA.HOSTED)}. Отметить можно до ${formatDeadline(deadline)}.`,
     ].join('\n'),
-  attendanceSave: (present: number, absent: number) => `Сохранить: на встрече ${present}, не было ${absent}`,
+  attendanceSave: attendanceSaveLabel,
   attendanceSaved: (present: number, absent: number) =>
     `Сохранено: на встрече ${present}, не было ${absent}. Карма начислена.`,
   attendanceCheckedIn: 'Отметка «Я на месте» есть, изменить нельзя',

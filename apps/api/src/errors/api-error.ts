@@ -5,6 +5,8 @@ import {
   formatRetryAfter,
   HOSTED_UPCOMING_MAX,
   LOBBIES_PER_DAY_MAX,
+  CREATION_BLOCKED_APPEAL,
+  CREATION_BLOCKED_TITLE,
   PLACE_TOO_FAR_MESSAGE,
   START_ISSUE_MESSAGES,
   type ApiErrorCode,
@@ -69,8 +71,7 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, HttpStatus>> = {
  */
 const MESSAGES: MessageMap = {
   not_onboarded: 'Сначала заполните профиль',
-  creation_blocked:
-    'Создание встреч заблокировано после отмены в последний час. Обжаловать можно будет позже',
+  creation_blocked: `${CREATION_BLOCKED_TITLE}. ${CREATION_BLOCKED_APPEAL}`,
   daily_limit: ({ newbie, retryAt, now }) =>
     newbie
       ? `Новичкам доступна одна встреча в сутки. Следующую можно создать ${formatRetryAfter(retryAt, now)}`
