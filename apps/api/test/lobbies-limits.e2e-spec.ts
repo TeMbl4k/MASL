@@ -173,6 +173,8 @@ describe.skipIf(!adminUrl)('lobby creation limits e2e (requires TEST_DATABASE_UR
 
   it('rate limits creates per user (lobbyWrite)', async () => {
     const host = await t.loginOnboarded();
+    // Onboarding spent one write; count from a clean window.
+    t.resetRateLimits();
     for (let i = 0; i < RATE_LIMITS.lobbyWrite.limit; i++) {
       expect((await t.createLobby(host.token, { title: 'аб' })).statusCode).toBe(400);
     }

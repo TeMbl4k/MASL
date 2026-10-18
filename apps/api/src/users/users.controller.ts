@@ -25,7 +25,9 @@ export class UsersController {
     return this.users.getMe(userId);
   }
 
+  /** Repeatable (it replaces the interests), so it shares the write limit of PUT /me/interests. */
   @Put('onboarding')
+  @RateLimit('lobbyWrite')
   @ResponseSchema(meDto)
   onboarding(
     @CurrentUserId() userId: string,

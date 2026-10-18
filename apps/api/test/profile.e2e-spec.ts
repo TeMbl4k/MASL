@@ -190,6 +190,8 @@ describe.skipIf(!adminUrl)('profile e2e (requires TEST_DATABASE_URL)', () => {
     it(`is rate limited per user (lobbyWrite, ${RATE_LIMITS.lobbyWrite.limit} a minute)`, async () => {
       const user = await t.loginOnboarded();
       const other = await t.loginOnboarded();
+      // Onboarding spent one write of each; count from a clean window.
+      t.resetRateLimits();
       for (let i = 0; i < RATE_LIMITS.lobbyWrite.limit; i++) {
         expect((await putInterests(user.token, { interests: ONBOARDING_INTERESTS })).statusCode).toBe(200);
       }
@@ -199,6 +201,27 @@ describe.skipIf(!adminUrl)('profile e2e (requires TEST_DATABASE_URL)', () => {
       expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
       expect((await me(user.token)).interests).toEqual([...ONBOARDING_INTERESTS].sort());
       expect((await putInterests(other.token, { interests: ONBOARDING_INTERESTS })).statusCode).toBe(200);
+    });
+
+    it('repeating onboarding shares the lobbyWrite limit, so it cannot sidestep it', async () => {
+      const user = await t.loginOnboarded();
+      t.resetRateLimits();
+      const onboarding = (interests: string[]) =>
+        t.app.inject({
+          method: 'PUT',
+          url: '/api/me/onboarding',
+          headers: authHeader(user.token),
+          payload: { gender: 'female', age: 25, interests },
+        });
+      const half = RATE_LIMITS.lobbyWrite.limit / 2;
+      for (let i = 0; i < half; i++) {
+        expect((await onboarding(ONBOARDING_INTERESTS)).statusCode).toBe(200);
+        expect((await putInterests(user.token, { interests: ONBOARDING_INTERESTS })).statusCode).toBe(200);
+      }
+      const limited = await onboarding(['music', 'cinema', 'walks']);
+      expect(limited.statusCode).toBe(429);
+      expect(limited.json()).toMatchObject({ code: 'rate_limited' });
+      expect((await me(user.token)).interests).toEqual([...ONBOARDING_INTERESTS].sort());
     });
   });
 });
