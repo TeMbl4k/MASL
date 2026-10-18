@@ -99,6 +99,9 @@ importers:
       '@masl/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@telegram-apps/bridge':
+        specifier: ^2.11.0
+        version: 2.11.0(typescript@6.0.3)
       '@telegram-apps/sdk':
         specifier: ^3.11.8
         version: 3.11.8(typescript@6.0.3)

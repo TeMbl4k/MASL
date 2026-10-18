@@ -2,8 +2,10 @@
   import type { LobbyChatDto } from '@masl/shared';
   import { api } from '#lib/api.js';
   import { session } from '#lib/session.svelte.js';
+  import { lobbyCache } from '#lib/stores/lobbies.svelte.js';
   import { toast } from '#lib/stores/toast.svelte.js';
   import { openInTelegram } from '#lib/tg/links.js';
+  import { canRequestChat, requestChat } from '#lib/tg/request-chat.js';
   import Chat from './icons/Chat.svelte';
 
   interface Props {
@@ -14,16 +16,33 @@
 
   let { lobbyId, chat, isHost }: Props = $props();
 
+  /** The bot links the group a moment after Telegram hands it over. */
+  const RELOAD_AFTER_MS = [1500, 5000];
+
+  const inApp = canRequestChat();
   let busy = $state(false);
 
-  /** The bot sends the host a group picker button; the page reloads the chat on return. */
-  async function create() {
+  /**
+   * Telegram's group picker right here (`app`), or a picker button in the bot's private chat
+   * (`bot`) for older clients and when the picker didn't open.
+   */
+  async function create(via: 'app' | 'bot') {
     if (busy) return;
     busy = true;
     try {
-      const { botLink } = await session.authorized((token) =>
-        api.prepareChat(token, lobbyId, { via: 'bot' }),
+      const { preparedButtonId, botLink } = await session.authorized((token) =>
+        api.prepareChat(token, lobbyId, { via }),
       );
+      if (preparedButtonId) {
+        busy = false;
+        if (await requestChat(preparedButtonId)) {
+          toast.show('Группа выбрана, подключаем чат', 'success');
+          for (const delay of RELOAD_AFTER_MS) {
+            setTimeout(() => void lobbyCache.load(lobbyId).catch(() => undefined), delay);
+          }
+        }
+        return;
+      }
       toast.show('Бот прислал кнопку: выберите или создайте группу', 'info', 5000);
       openInTelegram(botLink);
     } catch (error) {
@@ -71,13 +90,24 @@
       class="min-h-12 rounded-[0.875rem] bg-brand text-[0.9375rem] font-bold text-paper disabled:opacity-50"
       disabled={busy}
       aria-busy={busy}
-      onclick={() => void create()}
+      onclick={() => void create(inApp ? 'app' : 'bot')}
     >
       Создать чат встречи
     </button>
-    <span class="text-center text-xs text-gray-light">
-      Бот пришлёт кнопку в личные сообщения: там можно создать новую группу или выбрать свою
-    </span>
+    {#if inApp}
+      <button
+        type="button"
+        class="min-h-11 text-center text-xs text-gray-light underline underline-offset-2"
+        disabled={busy}
+        onclick={() => void create('bot')}
+      >
+        Не открылось? Пришлём кнопку в личку бота
+      </button>
+    {:else}
+      <span class="text-center text-xs text-gray-light">
+        Бот пришлёт кнопку в личные сообщения: там можно создать новую группу или выбрать свою
+      </span>
+    {/if}
   {:else}
     <p class="text-sm text-gray-light">Хост ещё не создал чат. Ссылку пришлёт бот.</p>
   {/if}
