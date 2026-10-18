@@ -555,7 +555,7 @@ export async function lockOwnMembership(tx: DbTransaction, lobbyId: string, user
  * Whether the host sees this application: a shadow-banned applicant is hidden unless already
  * taking a slot (spec §5.5, Q22). The list and the decisions share it, so neither reveals the ban.
  */
-const visibleToHostSql = sql<boolean>`(${or(
+export const visibleToHostSql = sql<boolean>`(${or(
   not(users.isShadowBanned),
   inArray(lobbyMembers.status, [...OCCUPYING_MEMBERSHIP_STATUSES]),
 )})`;
@@ -580,7 +580,7 @@ export async function lockApplication(tx: DbTransaction, lobbyId: string, applic
   return row ?? null;
 }
 
-const attendedCountSql =
+export const attendedCountSql =
   sql<number>`(select count(*) from ${karmaEvents} where ${karmaEvents.userId} = ${users.id} and ${karmaEvents.reason} = 'attended')`.mapWith(
     Number,
   );

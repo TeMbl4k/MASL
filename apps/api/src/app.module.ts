@@ -1,6 +1,7 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module.js';
+import { BotHandlersModule } from './bot/bot-handlers.module.js';
 import { ClockModule } from './clock/clock.module.js';
 import { EnvModule } from './config/env.module.js';
 import type { Env } from './config/env.js';
@@ -31,6 +32,7 @@ export class AppModule {
         KarmaModule,
         LobbiesModule,
         PlacesModule,
+        BotHandlersModule,
       ],
       controllers: [HealthController],
       providers: [

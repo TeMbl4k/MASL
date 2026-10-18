@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { and, eq, sql } from 'drizzle-orm';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { Bot } from 'grammy';
 import {
   applicationEvents,
   createDb,
@@ -26,9 +27,12 @@ import {
 } from '@masl/shared';
 import { nearestStation, placeHint, type LatLng } from '@masl/shared/metro';
 import { createApp } from '../src/app.factory.js';
+import { BOT } from '../src/bot/bot.provider.js';
+import { OutboxService } from '../src/bot/outbox.service.js';
 import { loadEnv } from '../src/config/env.js';
 import { KarmaService } from '../src/karma/karma.service.js';
 import { FixedWindowStore } from '../src/rate-limit/fixed-window.store.js';
+import { FakeTelegram } from './fake-telegram.js';
 import { signInitData } from './init-data.helper.js';
 
 export const adminUrl = process.env.TEST_DATABASE_URL;
@@ -99,6 +103,12 @@ export interface TestApp {
   /** Direct access for fixtures and state changes. */
   db: Database;
   close: () => Promise<void>;
+  /** The Bot API every test talks to instead of Telegram. */
+  telegram: FakeTelegram;
+  /** Sends what the outbox has due now. */
+  flushOutbox: () => Promise<number>;
+  /** Feeds an update to the bot as long polling would. */
+  handleUpdate: (update: Parameters<FakeTelegram['update']>[0]) => Promise<void>;
   /** Forgets every rate-limit window; call in beforeEach. */
   resetRateLimits: () => void;
   login: (telegramId?: number, firstName?: string) => Promise<AuthResponse>;
@@ -113,6 +123,7 @@ export async function bootApp(options: BootOptions = {}): Promise<TestApp> {
   const testDb: TestDatabase = await createTestDatabase(adminUrl!);
   let app: NestFastifyApplication | undefined;
   let handle: DbHandle | undefined;
+  const telegram = new FakeTelegram();
   try {
     const env = loadEnv({
       NODE_ENV: 'test',
@@ -122,6 +133,7 @@ export async function bootApp(options: BootOptions = {}): Promise<TestApp> {
       ...options.env,
     });
     app = await createApp(env, { logger: false });
+    telegram.install(app.get(BOT));
     options.beforeInit?.(app);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
@@ -166,6 +178,9 @@ export async function bootApp(options: BootOptions = {}): Promise<TestApp> {
       await handle.close();
       await testDb.drop();
     },
+    telegram,
+    flushOutbox: () => ready.get(OutboxService).flush(),
+    handleUpdate: (update) => ready.get<Bot>(BOT).handleUpdate(telegram.update(update)),
     resetRateLimits: () => ready.get(FixedWindowStore).clear(),
     login,
     onboard,

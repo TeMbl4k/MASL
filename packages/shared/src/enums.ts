@@ -75,6 +75,13 @@ export type MetroKind = (typeof METRO_KINDS)[number];
 export const LOBBY_CANCEL_REASONS = ['not_enough_people', 'plans_changed', 'other'] as const;
 export type LobbyCancelReason = (typeof LOBBY_CANCEL_REASONS)[number];
 
+/** Shown in the app and in the bot's messages. */
+export const LOBBY_CANCEL_REASON_LABELS: Readonly<Record<LobbyCancelReason, string>> = {
+  not_enough_people: 'Не набрались участники',
+  plans_changed: 'Изменились планы',
+  other: 'Другое',
+};
+
 /** What the viewer of a lobby detail may see: only member and host get the exact place. */
 export const LOBBY_ACCESS = ['public', 'member', 'host'] as const;
 export type LobbyAccess = (typeof LOBBY_ACCESS)[number];
