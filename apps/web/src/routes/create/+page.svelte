@@ -22,6 +22,7 @@
   import { dismissKeyboard } from '#lib/tg/keyboard.js';
   import { confirm } from '#lib/tg/popup.js';
   import { usePrimaryAction } from '#lib/tg/primary-action.svelte.js';
+  import { askWriteAccess } from '#lib/tg/write-access.js';
   import type { PersistedDraft } from '#lib/wizard/draft-codec.js';
   import { clearSavedDraft, LobbyDraft, loadSavedDraft, useDraftAutosave } from '#lib/wizard/draft.svelte.js';
   import { firstInvalidStep, hasIssues, toCreateInput, type WizardStep } from '#lib/wizard/validate.js';
@@ -141,6 +142,8 @@
       lobbyCache.setDetail(detail);
       await goto(`/my?tab=hosting&new=${detail.id}`, { replace: true });
       toast.show('Встреча опубликована', 'success');
+      // The bot sends the host new applications; asking doesn't hold the publish up.
+      void askWriteAccess();
     } catch (error) {
       publishing = false;
       toast.error(error);

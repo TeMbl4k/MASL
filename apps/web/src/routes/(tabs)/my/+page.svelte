@@ -30,6 +30,12 @@
         : 'hosting',
   );
   const bucket = $derived<LobbyBucketDto>(tab === 'hosting' ? myLobbies.hosting : myLobbies.joined);
+  /** Past hosted lobbies waiting for «Кто пришёл», shown above the upcoming ones. */
+  const attendanceDue = $derived(
+    tab === 'hosting'
+      ? myLobbies.hosting.past.filter((lobby) => myLobbies.attendanceDue.includes(lobby.id))
+      : [],
+  );
 
   /** «Организую · 2»; the count only once the list is loaded. */
   const label = (title: string, count: number) =>
@@ -113,6 +119,22 @@
         onretry={() => void myLobbies.ensure()}
       />
     {:else}
+      {#if attendanceDue.length > 0}
+        <ul class="flex flex-col gap-3" aria-label="Ждут отметки, кто пришёл">
+          {#each attendanceDue as lobby (lobby.id)}
+            {#snippet mark()}
+              <a
+                href="/lobby/{lobby.id}/attendance"
+                class="flex min-h-12 items-center justify-between gap-2 px-[1.125rem] text-[0.9375rem] font-semibold"
+              >
+                Отметьте, кто пришёл
+                <ChevronRight size={18} />
+              </a>
+            {/snippet}
+            <li><LobbyCard {lobby} footer={mark} /></li>
+          {/each}
+        </ul>
+      {/if}
       {#if bucket.upcoming.length > 0}
         <ul class="flex flex-col gap-3" aria-label="Предстоящие">
           {#each bucket.upcoming as lobby, index (lobby.id)}

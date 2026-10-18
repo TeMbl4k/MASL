@@ -16,6 +16,8 @@ class MyLobbies {
   hosting = $state<LobbyBucketDto>(emptyBucket());
   joined = $state<LobbyBucketDto>(emptyBucket());
   counts = $state<MyLobbiesResponse['counts']>({ hosted: 0, joined: 0 });
+  /** Ended hosted lobbies whose attendance the host still has to mark. */
+  attendanceDue = $state<string[]>([]);
   status = $state<LoadStatus>('idle');
   error = $state<string | null>(null);
   loadedAt = $state(0);
@@ -64,6 +66,7 @@ class MyLobbies {
         this.hosting = response.hosting;
         this.joined = response.joined;
         this.counts = response.counts;
+        this.attendanceDue = response.attendanceDue;
         this.loadedAt = Date.now();
         this.status = 'ready';
       })

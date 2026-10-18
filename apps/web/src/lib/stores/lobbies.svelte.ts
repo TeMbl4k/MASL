@@ -1,5 +1,6 @@
 import type {
   CancelApplicationResponse,
+  CheckInInput,
   CancelLobbyInput,
   CancelLobbyResponse,
   LobbyCardDto,
@@ -106,6 +107,21 @@ class LobbyCache {
       if (response.karmaDelta !== 0) void this.#refreshUser();
       return response;
     });
+  }
+
+  /** «Я на месте» of an approved member; the point goes to the API and is not kept. */
+  checkIn(id: string, point: CheckInInput): Promise<LobbyDetailDto> {
+    return this.#mutate(id, async () => {
+      const detail = await session.authorized((token) => api.checkIn(token, id, point));
+      this.#store(detail);
+      return detail;
+    });
+  }
+
+  /** After the host's attendance save: karma moved for the host too. */
+  attendanceSaved(): void {
+    this.#mutated();
+    void this.#refreshUser();
   }
 
   #version(id: string): number {

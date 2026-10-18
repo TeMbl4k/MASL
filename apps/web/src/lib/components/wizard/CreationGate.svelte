@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { formatRetryAfter, type CreationContextDto } from '@masl/shared';
+  import {
+    CREATION_BLOCKED_APPEAL,
+    CREATION_BLOCKED_TITLE,
+    formatRetryAfter,
+    type CreationContextDto,
+  } from '@masl/shared';
   import { plural, type PluralForms } from '#lib/format/plural.js';
   import { clock } from '#lib/stores/clock.svelte.js';
   import Alert from '../icons/Alert.svelte';
@@ -42,8 +47,8 @@
         };
       case 'blocked':
         return {
-          title: 'Создание встреч приостановлено',
-          text: 'Возможность обжаловать появится позже.',
+          title: CREATION_BLOCKED_TITLE,
+          text: `${CREATION_BLOCKED_APPEAL}.`,
           link: 'home',
         };
       default:
