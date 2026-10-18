@@ -17,6 +17,7 @@ export const KARMA_REASON_LABELS: Readonly<Record<KarmaReason, string>> = {
   late_cancel: 'Поздняя отмена',
   no_show: 'Не пришли',
   host_late_cancel: 'Поздняя отмена встречи хостом',
+  hosted: 'Провели встречу',
   manual: 'Изменение модератором',
 };
 

@@ -25,6 +25,8 @@ import {
 import {
   API_ERROR_CODES,
   APPLY_BLOCK_REASONS,
+  ATTENDANCE_STATES,
+  CHAT_STATES,
   CREATE_BLOCK_REASONS,
   GENDERS,
   KARMA_REASONS,
@@ -141,6 +143,8 @@ export const meDto = z.object({
   karma: z.number().int(),
   interests: z.array(z.string()),
   onboarded: z.boolean(),
+  /** The bot may message the user privately (exact address, approvals, attendance). */
+  botCanWrite: z.boolean(),
 });
 export type MeDto = z.infer<typeof meDto>;
 
@@ -229,6 +233,26 @@ export const cancelLobbyInput = z.object({
   comment: optionalText(singleLine(0, LOBBY_CANCEL_COMMENT_MAX)),
 });
 export type CancelLobbyInput = z.infer<typeof cancelLobbyInput>;
+
+/** POST /lobbies/:id/chat/prepare — `bot` sends the group picker as a button in the bot's chat. */
+export const chatPrepareInput = z.object({ via: z.enum(['app', 'bot']).default('app') });
+export type ChatPrepareInput = z.infer<typeof chatPrepareInput>;
+
+/** POST /lobbies/:id/check-in — the device position, any point on Earth; never stored. */
+export const checkInInput = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+export type CheckInInput = z.infer<typeof checkInInput>;
+
+/** PUT /lobbies/:id/attendance — every other approved member counts as attended. */
+export const attendanceInput = z.object({
+  absentApplicationIds: z
+    .array(z.uuid())
+    .max(LOBBY_SLOTS_MAX)
+    .refine((ids) => new Set(ids).size === ids.length, 'Участники не должны повторяться'),
+});
+export type AttendanceInput = z.infer<typeof attendanceInput>;
 
 /** GET /lobbies/feed */
 export const feedQuery = z
@@ -326,12 +350,43 @@ export const lobbyCardDto = z.strictObject({
 });
 export type LobbyCardDto = z.infer<typeof lobbyCardDto>;
 
+/** The meetup group: for the host and approved members while the lobby is open or active. */
+export const lobbyChatDto = z.strictObject({
+  state: z.enum(CHAT_STATES),
+  title: z.string().nullable(),
+  inviteLink: z.string().nullable(),
+});
+export type LobbyChatDto = z.infer<typeof lobbyChatDto>;
+
+/** Host, open lobby: from `lateFrom`, a cancel with every slot taken costs KARMA.HOST_LATE_CANCEL. */
+export const cancelPolicyDto = z.strictObject({ lateFrom: isoOut, quorumMet: z.boolean() });
+export type CancelPolicyDto = z.infer<typeof cancelPolicyDto>;
+
+/** Approved member while the lobby is open or active: the «Я на месте» window. */
+export const checkInDto = z.strictObject({
+  opensAt: isoOut,
+  closesAt: isoOut,
+  checkedInAt: isoOut.nullable(),
+});
+export type CheckInDto = z.infer<typeof checkInDto>;
+
+/** Host, finished lobby: where attendance marking stands. */
+export const attendanceSummaryDto = z.strictObject({
+  state: z.enum(ATTENDANCE_STATES),
+  deadline: isoOut,
+});
+export type AttendanceSummaryDto = z.infer<typeof attendanceSummaryDto>;
+
 const lobbyDetailBase = lobbyCardDto.extend({
   description: z.string().nullable(),
   cancelReason: z.enum(LOBBY_CANCEL_REASONS).nullable(),
   cancelComment: z.string().nullable(),
   /** Host, approved and attended members; null for everyone else (they see approvedCount). */
   members: z.array(personDto).nullable(),
+  chat: lobbyChatDto.nullable(),
+  cancelPolicy: cancelPolicyDto.nullable(),
+  checkIn: checkInDto.nullable(),
+  attendance: attendanceSummaryDto.nullable(),
 });
 
 /** GET /lobbies/:id and every lobby mutation; only `member` and `host` carry the exact place. */
@@ -396,6 +451,18 @@ export const creationContextDto = z.strictObject({
 });
 export type CreationContextDto = z.infer<typeof creationContextDto>;
 
+/** POST /lobbies/:id/cancel */
+export const cancelLobbyResponse = z.strictObject({
+  lobby: lobbyDetailDto,
+  /** KARMA.HOST_LATE_CANCEL for a late cancel of a full lobby, otherwise 0. */
+  karmaDelta: z.number().int(),
+});
+export type CancelLobbyResponse = z.infer<typeof cancelLobbyResponse>;
+
+/** POST /lobbies/:id/chat/prepare — the id for WebApp.requestChat; null when the bot sent the button. */
+export const chatPrepareResponse = z.strictObject({ preparedButtonId: z.string().nullable() });
+export type ChatPrepareResponse = z.infer<typeof chatPrepareResponse>;
+
 /** DELETE /lobbies/:id/applications/me */
 export const cancelApplicationResponse = z.strictObject({
   lobby: lobbyDetailDto,
@@ -424,6 +491,27 @@ export const hostApplicationsResponse = z.strictObject({
   rejected: z.array(applicantDto),
 });
 export type HostApplicationsResponse = z.infer<typeof hostApplicationsResponse>;
+
+export const attendanceMemberDto = z.strictObject({
+  applicationId: z.uuid(),
+  user: personDto,
+  /** Checked-in members can't be marked absent. */
+  checkedInAt: isoOut.nullable(),
+  /** Before the save: the host's draft from the bot; after it: the result. */
+  absent: z.boolean(),
+  status: z.enum(MEMBERSHIP_STATUSES),
+});
+export type AttendanceMemberDto = z.infer<typeof attendanceMemberDto>;
+
+/** GET and PUT /lobbies/:id/attendance (host only). */
+export const attendanceResponse = z.strictObject({
+  lobby: lobbyCardDto,
+  state: z.enum(ATTENDANCE_STATES),
+  opensAt: isoOut,
+  deadline: isoOut,
+  members: z.array(attendanceMemberDto),
+});
+export type AttendanceResponse = z.infer<typeof attendanceResponse>;
 
 export const karmaEventDto = z.strictObject({
   reason: z.enum(KARMA_REASONS),

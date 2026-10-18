@@ -132,6 +132,11 @@ export type DetailAccess =
   | { access: Extract<LobbyAccess, 'public'> }
   | { access: Extract<LobbyAccess, 'member' | 'host'>; exactPlace: ExactPlaceDto };
 
+/** Detail parts that depend on the viewer's role; each is null for anyone else. */
+export type DetailExtras = Pick<LobbyDetailDto, 'chat' | 'cancelPolicy' | 'checkIn' | 'attendance'>;
+
+export const NO_EXTRAS: DetailExtras = { chat: null, cancelPolicy: null, checkIn: null, attendance: null };
+
 /** The detail; `exactPlace` exists only for member and host access. */
 export function toLobbyDetail(
   row: LobbyCardRow,
@@ -139,6 +144,7 @@ export function toLobbyDetail(
   now: Date,
   access: DetailAccess,
   members: PersonDto[] | null,
+  extras: DetailExtras = NO_EXTRAS,
 ): LobbyDetailDto {
   const base = {
     ...toLobbyCard(row, viewer, now),
@@ -146,6 +152,10 @@ export function toLobbyDetail(
     cancelReason: parseCancelReason(row.cancelReason),
     cancelComment: row.cancelComment,
     members,
+    chat: extras.chat,
+    cancelPolicy: extras.cancelPolicy,
+    checkIn: extras.checkIn,
+    attendance: extras.attendance,
   };
   return access.access === 'public'
     ? { ...base, access: 'public' }

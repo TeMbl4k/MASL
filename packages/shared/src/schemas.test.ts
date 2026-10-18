@@ -13,6 +13,9 @@ import { INTERESTS, INTEREST_SLUGS } from './interests.js';
 import {
   apiErrorDto,
   applicantDto,
+  attendanceInput,
+  attendanceResponse,
+  checkInInput,
   cancelLobbyInput,
   createLobbyInput,
   feedQuery,
@@ -242,6 +245,22 @@ describe('cancelLobbyInput', () => {
   });
 });
 
+describe('stage 3 inputs', () => {
+  it('takes a list of distinct application ids as absent', () => {
+    expect(ok(attendanceInput, { absentApplicationIds: [] })).toBe(true);
+    expect(ok(attendanceInput, { absentApplicationIds: [REQUEST_ID] })).toBe(true);
+    expect(ok(attendanceInput, { absentApplicationIds: [REQUEST_ID, REQUEST_ID] })).toBe(false);
+    expect(ok(attendanceInput, { absentApplicationIds: ['1'] })).toBe(false);
+    expect(ok(attendanceInput, {})).toBe(false);
+  });
+
+  it('takes any point on Earth for a check-in', () => {
+    expect(ok(checkInInput, { lat: 59.93, lng: 30.31 })).toBe(true);
+    expect(ok(checkInInput, { lat: 91, lng: 0 })).toBe(false);
+    expect(ok(checkInInput, { lat: '55.7', lng: 37.6 })).toBe(false);
+  });
+});
+
 describe('query schemas', () => {
   it('feedQuery needs both coordinates or none', () => {
     expect(ok(feedQuery, { lat: '55.75' })).toBe(false);
@@ -357,7 +376,17 @@ describe('response schemas fail closed', () => {
     host: { firstName: 'Анна', photoUrl: null, karma: 50 },
     viewer: { isHost: false, membershipStatus: null, applyBlock: null },
   };
-  const detail = { ...card, description: null, cancelReason: null, cancelComment: null, members: null };
+  const detail = {
+    ...card,
+    description: null,
+    cancelReason: null,
+    cancelComment: null,
+    members: null,
+    chat: null,
+    cancelPolicy: null,
+    checkIn: null,
+    attendance: null,
+  };
   const exactPlace = { address: 'CANARY-ул. Тестовая, 1', point: { lat: 55.7951, lng: 37.5502 } };
 
   it('accepts a valid card and rejects unknown keys at any depth', () => {
@@ -390,6 +419,37 @@ describe('response schemas fail closed', () => {
     expect(ok(lobbyDetailDto, { ...detail, access: 'host', exactPlace })).toBe(true);
     expect(ok(lobbyDetailDto, { ...detail, access: 'admin', exactPlace })).toBe(false);
     expect(lobbyDetailDto.options.map((option) => option.shape.access.value)).toEqual([...LOBBY_ACCESS]);
+  });
+
+  it('keeps the stage 3 detail parts strict', () => {
+    const chat = { state: 'linked', title: 'Падел', inviteLink: 'https://t.me/+abc' };
+    expect(ok(lobbyDetailDto, { ...detail, access: 'member', exactPlace, chat })).toBe(true);
+    expect(
+      ok(lobbyDetailDto, { ...detail, access: 'member', exactPlace, chat: { ...chat, chatId: 1 } }),
+    ).toBe(false);
+    const checkIn = { opensAt: card.startsAt, closesAt: card.endsAt, checkedInAt: null };
+    expect(ok(lobbyDetailDto, { ...detail, access: 'member', exactPlace, checkIn })).toBe(true);
+    expect(
+      ok(lobbyDetailDto, { ...detail, access: 'member', exactPlace, checkIn: { ...checkIn, lat: 55.1 } }),
+    ).toBe(false);
+    const member = {
+      applicationId: REQUEST_ID,
+      user: card.host,
+      checkedInAt: null,
+      absent: false,
+      status: 'approved',
+    };
+    const attendance = {
+      lobby: card,
+      state: 'open',
+      opensAt: card.endsAt,
+      deadline: card.endsAt,
+      members: [member],
+    };
+    expect(ok(attendanceResponse, attendance)).toBe(true);
+    expect(ok(attendanceResponse, { ...attendance, members: [{ ...member, userId: REQUEST_ID }] })).toBe(
+      false,
+    );
   });
 
   it('wraps cards in the list responses', () => {

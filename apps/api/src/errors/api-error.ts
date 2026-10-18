@@ -1,6 +1,7 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import {
   APPLICATIONS_PENDING_MAX,
+  CHECK_IN_OPENS_MINUTES_BEFORE,
   formatRetryAfter,
   HOSTED_UPCOMING_MAX,
   LOBBIES_PER_DAY_MAX,
@@ -46,6 +47,15 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, HttpStatus>> = {
   application_not_pending: HttpStatus.CONFLICT,
   applicant_karma_too_low: HttpStatus.CONFLICT,
   invalid_cursor: HttpStatus.BAD_REQUEST,
+  chat_already_linked: HttpStatus.CONFLICT,
+  bot_unavailable: HttpStatus.SERVICE_UNAVAILABLE,
+  check_in_not_open: HttpStatus.CONFLICT,
+  check_in_closed: HttpStatus.CONFLICT,
+  check_in_too_far: HttpStatus.CONFLICT,
+  attendance_not_open: HttpStatus.CONFLICT,
+  attendance_closed: HttpStatus.CONFLICT,
+  attendance_saved: HttpStatus.CONFLICT,
+  checked_in_member: HttpStatus.BAD_REQUEST,
   rate_limited: HttpStatus.TOO_MANY_REQUESTS,
   conflict: HttpStatus.CONFLICT,
   invalid_data: HttpStatus.BAD_REQUEST,
@@ -59,7 +69,8 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, HttpStatus>> = {
  */
 const MESSAGES: MessageMap = {
   not_onboarded: 'Сначала заполните профиль',
-  creation_blocked: 'Создание встреч приостановлено. Обжаловать можно будет позже',
+  creation_blocked:
+    'Создание встреч заблокировано после отмены в последний час. Обжаловать можно будет позже',
   daily_limit: ({ newbie, retryAt, now }) =>
     newbie
       ? `Новичкам доступна одна встреча в сутки. Следующую можно создать ${formatRetryAfter(retryAt, now)}`
@@ -84,6 +95,16 @@ const MESSAGES: MessageMap = {
   application_not_pending: 'Заявка уже рассмотрена или отменена',
   applicant_karma_too_low: 'Карма участника ниже порога встречи',
   invalid_cursor: 'Список устарел — обновите ленту',
+  chat_already_linked: 'У встречи уже есть чат',
+  bot_unavailable:
+    'Не получилось связаться с Telegram. Откройте чат с ботом, нажмите «Старт» и попробуйте ещё раз',
+  check_in_not_open: `Отметиться можно за ${CHECK_IN_OPENS_MINUTES_BEFORE} минут до начала`,
+  check_in_closed: 'Отметиться уже нельзя',
+  check_in_too_far: 'Вы далеко от места встречи. Подойдите ближе и попробуйте ещё раз',
+  attendance_not_open: 'Отметить, кто пришёл, можно после окончания встречи',
+  attendance_closed: 'Время отметить, кто пришёл, вышло',
+  attendance_saved: 'Вы уже отметили, кто пришёл',
+  checked_in_member: 'Нельзя отметить отсутствие того, кто отметился на месте',
   rate_limited: 'Слишком много запросов. Подождите немного',
   conflict: 'Данные изменились, попробуйте ещё раз',
   invalid_data: 'Некорректные данные',

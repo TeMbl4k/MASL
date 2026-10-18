@@ -122,6 +122,7 @@ export class UsersService {
       karma: user.karma,
       interests: interestSlugs,
       onboarded: user.onboardedAt !== null,
+      botCanWrite: user.allowsWriteToPm,
     };
   }
 
