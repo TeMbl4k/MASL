@@ -34,6 +34,17 @@ export default defineConfig({
           exclude: ['src/**/*.svelte.{test,spec}.{js,ts}'],
         },
       },
+      {
+        extends: './vite.config.ts',
+        // Runes modules compiled for the client, so $effect runs; no DOM is needed.
+        resolve: { conditions: ['browser'] },
+        test: {
+          name: 'client',
+          environment: './test/client-environment.ts',
+          server: { deps: { inline: ['svelte'] } },
+          include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+        },
+      },
     ],
   },
 });

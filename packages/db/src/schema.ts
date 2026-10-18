@@ -20,8 +20,10 @@ import {
   GENDERS,
   KARMA,
   KARMA_REASONS,
+  LOBBY_CANCEL_COMMENT_MAX,
   LOBBY_CATEGORIES,
   LOBBY_DESCRIPTION_MAX,
+  LOBBY_MIN_KARMA_MAX,
   LOBBY_SLOTS_MAX,
   LOBBY_SLOTS_MIN,
   LOBBY_STATUSES,
@@ -114,6 +116,12 @@ export const lobbies = pgTable(
     address: text('address').notNull(),
     /** Public approximate place for the feed and lobby card, e.g. "м. Динамо". */
     placeHint: varchar('place_hint', { length: 128 }).notNull(),
+    /** Station of the public place; from @masl/shared/metro (ids are never reused). */
+    metroStationId: varchar('metro_station_id', { length: 32 }).notNull(),
+    /** Public approximate point = the station's point. Feed, ranking, distance and map use ONLY this. */
+    publicLocation: geographyPoint('public_location').notNull(),
+    /** Exact point is farther than PLACE_FAR_FROM_METRO_M from the station. */
+    farFromMetro: boolean('far_from_metro').notNull().default(false),
     /** Number of participants the host needs, excluding the host ("+3"). */
     slots: smallint('slots').notNull(),
     /** Minimum karma to join; null means no filter. */
@@ -122,18 +130,33 @@ export const lobbies = pgTable(
     status: lobbyStatusEnum('status').notNull().default('open'),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     cancelReason: text('cancel_reason'),
+    cancelComment: varchar('cancel_comment', { length: LOBBY_CANCEL_COMMENT_MAX }),
+    /** Idempotency key of the create request (one per wizard draft); the API always sets it. */
+    clientRequestId: uuid('client_request_id').notNull().defaultRandom(),
     ...timestamps,
   },
   (t) => [
     index('lobbies_location_gist').using('gist', t.location),
     index('lobbies_status_starts_at_idx').on(t.status, t.startsAt),
-    index('lobbies_host_id_idx').on(t.hostId),
+    // For a future bbox query.
+    index('lobbies_public_location_gist').using('gist', t.publicLocation),
+    uniqueIndex('lobbies_host_request_uq').on(t.hostId, t.clientRequestId),
+    // Rolling-window creation limits.
+    index('lobbies_host_created_at_idx').on(t.hostId, t.createdAt),
     check('lobbies_time_order_chk', sql`${t.endsAt} > ${t.startsAt}`),
     check(
       'lobbies_slots_chk',
       sql`${t.slots} between ${sql.raw(String(LOBBY_SLOTS_MIN))} and ${sql.raw(String(LOBBY_SLOTS_MAX))}`,
     ),
     check('lobbies_min_karma_chk', sql`${t.minKarma} is null or ${t.minKarma} >= 0`),
+    check(
+      'lobbies_min_karma_max_chk',
+      sql`${t.minKarma} is null or ${t.minKarma} <= ${sql.raw(String(LOBBY_MIN_KARMA_MAX))}`,
+    ),
+    check(
+      'lobbies_cancel_consistency_chk',
+      sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`,
+    ),
   ],
 );
 
@@ -158,7 +181,35 @@ export const lobbyMembers = pgTable(
     uniqueIndex('lobby_members_lobby_user_uq').on(t.lobbyId, t.userId),
     index('lobby_members_user_status_idx').on(t.userId, t.status),
     index('lobby_members_lobby_status_idx').on(t.lobbyId, t.status),
+    // 'cancelled' with decided_at set means approved, then left.
+    check(
+      'lobby_members_decided_chk',
+      sql`${t.status} in ('pending','cancelled') or ${t.decidedAt} is not null`,
+    ),
+    check(
+      'lobby_members_cancel_consistency_chk',
+      sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`,
+    ),
   ],
+);
+
+/**
+ * One row per apply, renewals after a withdrawal included (lobby_members keeps only the last).
+ * Append-only; the applications-per-day cap counts these rows.
+ */
+export const applicationEvents = pgTable(
+  'application_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lobbyId: uuid('lobby_id')
+      .notNull()
+      .references(() => lobbies.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('application_events_user_created_idx').on(t.userId, t.createdAt)],
 );
 
 export const karmaEvents = pgTable(
@@ -190,3 +241,4 @@ export type Lobby = typeof lobbies.$inferSelect;
 export type NewLobby = typeof lobbies.$inferInsert;
 export type LobbyMember = typeof lobbyMembers.$inferSelect;
 export type KarmaEvent = typeof karmaEvents.$inferSelect;
+export type ApplicationEvent = typeof applicationEvents.$inferSelect;

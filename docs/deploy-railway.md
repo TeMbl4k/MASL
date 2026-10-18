@@ -39,7 +39,7 @@
 1. **+ New** → **GitHub Repo** → `TeMbl4k/masl`. Если Railway попросит доступ к GitHub, разрешите его для этого репозитория. Railway сразу начнёт деплой из ветки `main`, где кода пока нет, и он упадёт: это нормально, ветку меняем на следующем шаге.
 2. Переименуйте сервис в `masl` (Settings → Service Name), чтобы не путаться.
 3. **Settings** → **Source**:
-   - Branch: `stage-1-scaffold`, пока PR с этапом 1 не слит; потом `main`.
+   - Branch: `main`.
    - Root Directory оставьте пустым. Railway сам найдёт `Dockerfile` в корне.
 4. **Variables** → **RAW Editor**:
 
@@ -50,6 +50,8 @@
    BOT_TOKEN=<токен от BotFather>
    JWT_SECRET=<случайная строка 2>
    ```
+
+   По желанию добавьте `DADATA_API_KEY=<ключ DaData>` для подсказок адресов; без него место выбирают точкой на карте.
 
 5. **Settings** → **Deploy** → **Healthcheck Path**: `/api/health`.
 6. **Settings** → **Networking** → **Generate Domain**, порт `3000`. Получится адрес `https://<имя>.up.railway.app`.
@@ -69,7 +71,7 @@
 
 ## 5. Обновления
 
-Каждый push в выбранную ветку Railway деплоит сам. После слияния PR переключите ветку в Settings → Source на `main`.
+Каждый push в `main` Railway деплоит сам.
 
 ## Если что-то не так
 

@@ -1,6 +1,6 @@
 import type { InterestDto, MeDto, OnboardingInput } from '@masl/shared';
 import { api, ApiError } from './api.js';
-import { initTelegram } from './telegram.js';
+import { initTelegram, type TelegramContext } from './telegram.js';
 
 type SessionState =
   | { status: 'loading' }
@@ -26,7 +26,12 @@ class Session {
   state = $state<SessionState>({ status: 'loading' });
   interests = $state<InterestDto[]>([]);
 
-  #telegram: { rawInitData: string | undefined } | undefined;
+  #telegram: TelegramContext | undefined;
+
+  /** Opened by a real Telegram client (not the dev mock): native buttons and popups exist. */
+  get inTelegram(): boolean {
+    return this.#telegram?.inTelegram ?? false;
+  }
 
   async start(): Promise<void> {
     this.state = { status: 'loading' };
@@ -46,6 +51,18 @@ class Session {
       this.state = { status: 'ready', token, user };
     } catch (error) {
       this.state = { status: 'error', message: errorMessage(error) };
+    }
+  }
+
+  /** Calls the API with the session token, re-logging in once on 401 (see #withToken). */
+  authorized<T>(call: (token: string) => Promise<T>): Promise<T> {
+    return this.#withToken(call);
+  }
+
+  /** Replaces the current user after an API call returned a fresh profile (karma, interests). */
+  setUser(user: MeDto): void {
+    if (this.state.status === 'ready') {
+      this.state = { ...this.state, user };
     }
   }
 

@@ -25,3 +25,17 @@ export const INTERESTS: readonly InterestDefinition[] = [
 ];
 
 export const INTEREST_SLUGS = INTERESTS.map((i) => i.slug);
+
+export interface LobbyCategoryInfo {
+  title: string;
+  emoji: string;
+}
+
+/** Title and emoji of every lobby category: the interests plus «Другое». */
+export const LOBBY_CATEGORY_INFO: Readonly<Record<LobbyCategory, LobbyCategoryInfo>> = {
+  ...(Object.fromEntries(INTERESTS.map((i) => [i.slug, { title: i.title, emoji: i.emoji }])) as Record<
+    InterestDefinition['slug'],
+    LobbyCategoryInfo
+  >),
+  other: { title: 'Другое', emoji: '✨' },
+};

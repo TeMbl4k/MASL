@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asc, eq } from 'drizzle-orm';
 import { INTEREST_SLUGS, KARMA } from '@masl/shared';
+import { nearestStation, placeHint } from '@masl/shared/metro';
 import { createDb, type DbHandle } from './client.js';
 import { distanceMeters, withinMeters, type GeoPoint } from './geo.js';
 import { interests, karmaEvents, lobbies, users } from './schema.js';
@@ -13,6 +14,16 @@ const adminUrl = process.env.TEST_DATABASE_URL;
 const DINAMO: GeoPoint = { lng: 37.5585, lat: 55.7894 };
 const BELORUSSKAYA: GeoPoint = { lng: 37.5818, lat: 55.7774 };
 const ZELENOGRAD: GeoPoint = { lng: 37.1944, lat: 55.9825 };
+
+/** Public place columns derived from the nearest station, as the API does at create time. */
+function publicPlace(point: GeoPoint) {
+  const { station, line } = nearestStation(point);
+  return {
+    metroStationId: station.id,
+    publicLocation: { lng: station.lng, lat: station.lat },
+    placeHint: placeHint(station, line),
+  };
+}
 
 describe.skipIf(!adminUrl)('PostGIS and schema (requires TEST_DATABASE_URL)', () => {
   let testDb: TestDatabase;
@@ -59,13 +70,14 @@ describe.skipIf(!adminUrl)('PostGIS and schema (requires TEST_DATABASE_URL)', ()
         endsAt: new Date(startsAt.getTime() + 2 * 3600_000),
         location: DINAMO,
         address: 'Ленинградский проспект, 36',
-        placeHint: 'м. Динамо',
+        ...publicPlace(DINAMO),
         slots: 3,
       })
       .returning();
 
     expect(lobby?.location.lng).toBeCloseTo(DINAMO.lng, 6);
     expect(lobby?.location.lat).toBeCloseTo(DINAMO.lat, 6);
+    expect(lobby?.placeHint).toBe('м. Динамо');
 
     const [row] = await handle.db
       .select({ meters: distanceMeters(lobbies.location, BELORUSSKAYA) })
@@ -85,7 +97,7 @@ describe.skipIf(!adminUrl)('PostGIS and schema (requires TEST_DATABASE_URL)', ()
       endsAt: new Date(startsAt.getTime() + 3600_000),
       location: ZELENOGRAD,
       address: 'Зеленоград',
-      placeHint: 'Зеленоград',
+      ...publicPlace(ZELENOGRAD),
       slots: 4,
     });
 
@@ -107,7 +119,7 @@ describe.skipIf(!adminUrl)('PostGIS and schema (requires TEST_DATABASE_URL)', ()
         endsAt: new Date(startsAt.getTime() - 60_000),
         location: DINAMO,
         address: 'адрес',
-        placeHint: 'м. Динамо',
+        ...publicPlace(DINAMO),
         slots: 2,
       }),
     ).rejects.toThrow();

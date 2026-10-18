@@ -1,0 +1,4 @@
+# Verbatim upstream copies: keep their bytes (CRLF) so the SHA-256 in SOURCE.md matches.
+packages/shared/src/metro/sources/metro4all-*.csv -text
+# Generated with LF; the regeneration test compares bytes.
+packages/shared/src/metro/data.ts text eol=lf

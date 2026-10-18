@@ -5,3 +5,4 @@ build
 .turbo
 pnpm-lock.yaml
 packages/db/drizzle
+packages/shared/src/metro/data.ts

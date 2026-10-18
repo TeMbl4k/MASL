@@ -1,13 +1,19 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { asc, eq, sql, type SQLWrapper } from 'drizzle-orm';
 import { userInterests, users, type Database, type User } from '@masl/db';
-import type { MeDto, OnboardingInput } from '@masl/shared';
+import type { MeDto, OnboardingInput, UpdateInterestsInput } from '@masl/shared';
 import type { TelegramIdentity } from '../auth/init-data.service.js';
+import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { DB } from '../db/db.module.js';
+import { apiError } from '../errors/api-error.js';
+import type { DbTransaction } from '../karma/karma.service.js';
 
 @Injectable()
 export class UsersService {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
 
   /**
    * Creates the user on first sign-in or refreshes Telegram data on later ones.
@@ -57,6 +63,21 @@ export class UsersService {
     return this.toMeDto(user, await this.interestsOf(userId));
   }
 
+  /**
+   * 403 `not_onboarded` unless the user finished onboarding; the flag is read fresh from the DB.
+   * Inside `tx` the user row is also locked (FOR NO KEY UPDATE), the first lock of the call.
+   */
+  async requireOnboarded(userId: string, tx?: DbTransaction): Promise<void> {
+    const query = (tx ?? this.db)
+      .select({ onboardedAt: users.onboardedAt })
+      .from(users)
+      .where(eq(users.id, userId));
+    const [user] = tx ? await query.for('no key update') : await query;
+    if (!user?.onboardedAt) {
+      throw apiError('not_onboarded');
+    }
+  }
+
   async completeOnboarding(userId: string, input: OnboardingInput, now: Date = new Date()): Promise<MeDto> {
     const birthYear = now.getUTCFullYear() - input.age;
     await this.db.transaction(async (tx) => {
@@ -72,8 +93,18 @@ export class UsersService {
       if (updated.length === 0) {
         throw new NotFoundException('Пользователь не найден');
       }
-      await tx.delete(userInterests).where(eq(userInterests.userId, userId));
-      await tx.insert(userInterests).values(input.interests.map((slug) => ({ userId, interestSlug: slug })));
+      await this.replaceInterests(tx, userId, input.interests);
+    });
+    return this.getMe(userId);
+  }
+
+  /** Replaces the interests chosen at onboarding; only the caller's own row is touched. */
+  async updateInterests(userId: string, input: UpdateInterestsInput): Promise<MeDto> {
+    const now = this.clock.now();
+    await this.db.transaction(async (tx) => {
+      await this.requireOnboarded(userId, tx);
+      await this.replaceInterests(tx, userId, input.interests);
+      await tx.update(users).set({ updatedAt: now }).where(eq(users.id, userId));
     });
     return this.getMe(userId);
   }
@@ -92,6 +123,11 @@ export class UsersService {
       interests: interestSlugs,
       onboarded: user.onboardedAt !== null,
     };
+  }
+
+  private async replaceInterests(tx: DbTransaction, userId: string, slugs: readonly string[]): Promise<void> {
+    await tx.delete(userInterests).where(eq(userInterests.userId, userId));
+    await tx.insert(userInterests).values(slugs.map((slug) => ({ userId, interestSlug: slug })));
   }
 
   private async interestsOf(userId: string): Promise<string[]> {
