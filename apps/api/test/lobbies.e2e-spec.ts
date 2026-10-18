@@ -258,6 +258,32 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
       expect(await t.db.select().from(lobbies).where(eq(lobbies.hostId, other.user.id))).toHaveLength(1);
     });
 
+    it("another user's requestId creates their own lobby, never returns the first one (T-RACE-7)", async () => {
+      const a = await t.loginOnboarded();
+      const b = await t.loginOnboarded();
+      const requestId = crypto.randomUUID();
+      const first = await t.createLobby(a.token, { requestId, title: 'Лобби А' });
+      expect(first.statusCode).toBe(201);
+
+      const bPoint = { lat: 55.7601, lng: 37.6187 };
+      const bAddress = 'Адрес Б, 7';
+      const second = await t.createLobby(b.token, {
+        requestId,
+        title: 'Лобби Б',
+        location: bPoint,
+        address: bAddress,
+      });
+      expect(second.statusCode).toBe(201);
+      const body = lobbyDetailDto.parse(second.json());
+      expect(body.id).not.toBe(first.json().id);
+      expect(body).toMatchObject({ title: 'Лобби Б', access: 'host', exactPlace: { address: bAddress } });
+      assertNoExactPlace(second.json());
+
+      const [aLobby] = await t.db.select().from(lobbies).where(eq(lobbies.hostId, a.user.id));
+      expect(aLobby).toMatchObject({ id: first.json().id, title: 'Лобби А', address: CANARY_ADDRESS });
+      expect(await t.db.select().from(lobbies).where(eq(lobbies.hostId, b.user.id))).toHaveLength(1);
+    });
+
     it('T-IDOR-5: host, status, public place and karma in the body have no effect', async () => {
       const host = await t.loginOnboarded();
       const victim = await t.loginOnboarded();
