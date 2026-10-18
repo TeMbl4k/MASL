@@ -9,6 +9,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  serial,
   smallint,
   text,
   timestamp,
@@ -17,6 +18,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import {
+  FEEDBACK_RATINGS,
   GENDERS,
   KARMA,
   KARMA_REASONS,
@@ -30,6 +32,7 @@ import {
   LOBBY_TITLE_MAX,
   MEMBERSHIP_STATUSES,
   PAYMENT_FORMATS,
+  type NotificationKind,
 } from '@masl/shared';
 import { geographyPoint } from './geo.js';
 
@@ -39,6 +42,7 @@ export const lobbyStatusEnum = pgEnum('lobby_status', LOBBY_STATUSES);
 export const paymentFormatEnum = pgEnum('payment_format', PAYMENT_FORMATS);
 export const membershipStatusEnum = pgEnum('membership_status', MEMBERSHIP_STATUSES);
 export const karmaReasonEnum = pgEnum('karma_reason', KARMA_REASONS);
+export const feedbackRatingEnum = pgEnum('feedback_rating', FEEDBACK_RATINGS);
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -133,6 +137,20 @@ export const lobbies = pgTable(
     cancelComment: varchar('cancel_comment', { length: LOBBY_CANCEL_COMMENT_MAX }),
     /** Idempotency key of the create request (one per wizard draft); the API always sets it. */
     clientRequestId: uuid('client_request_id').notNull().defaultRandom(),
+    /** Meetup group in Telegram; the invite link creates join requests the bot decides. */
+    chatId: bigint('chat_id', { mode: 'number' }),
+    chatTitle: varchar('chat_title', { length: 128 }),
+    chatInviteLink: text('chat_invite_link'),
+    chatLinkedAt: timestamp('chat_linked_at', { withTimezone: true }),
+    /** The bot left or was removed; the group is no longer the lobby's. */
+    chatClosedAt: timestamp('chat_closed_at', { withTimezone: true }),
+    /** Scheduler steps, each set once by the step that handled the lobby (spec stage 3 §8). */
+    quorumCheckedAt: timestamp('quorum_checked_at', { withTimezone: true }),
+    endedNotifiedAt: timestamp('ended_notified_at', { withTimezone: true }),
+    attendanceRequestedAt: timestamp('attendance_requested_at', { withTimezone: true }),
+    attendanceRemindedAt: timestamp('attendance_reminded_at', { withTimezone: true }),
+    attendanceSavedAt: timestamp('attendance_saved_at', { withTimezone: true }),
+    attendanceClosedAt: timestamp('attendance_closed_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [
@@ -157,6 +175,11 @@ export const lobbies = pgTable(
       'lobbies_cancel_consistency_chk',
       sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`,
     ),
+    check('lobbies_chat_consistency_chk', sql`(${t.chatId} is null) = (${t.chatLinkedAt} is null)`),
+    // A group serves one lobby at a time.
+    uniqueIndex('lobbies_active_chat_uq')
+      .on(t.chatId)
+      .where(sql`${t.chatId} is not null and ${t.chatClosedAt} is null`),
   ],
 );
 
@@ -175,6 +198,10 @@ export const lobbyMembers = pgTable(
     decidedAt: timestamp('decided_at', { withTimezone: true }),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
+    /** Joined the meetup group through a join request the bot approved. */
+    chatJoinedAt: timestamp('chat_joined_at', { withTimezone: true }),
+    /** The host's toggle in the bot's attendance poll, before the save. */
+    attendanceAbsentDraft: boolean('attendance_absent_draft').notNull().default(false),
     ...timestamps,
   },
   (t) => [
@@ -234,6 +261,74 @@ export const karmaEvents = pgTable(
   ],
 );
 
+/** «Создать чат встречи»: the id is the request_id of the prepared request_chat button. */
+export const lobbyChatRequests = pgTable('lobby_chat_requests', {
+  id: serial('id').primaryKey(),
+  lobbyId: uuid('lobby_id')
+    .notNull()
+    .references(() => lobbies.id, { onDelete: 'cascade' }),
+  hostId: uuid('host_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+});
+
+/**
+ * Outbox of bot messages, written in the transaction of the change they report. Rows hold ids
+ * only: the text, the exact address and the buttons are rendered from current rows at send time.
+ */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    /** Private chat target. */
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    /** Group target. */
+    chatId: bigint('chat_id', { mode: 'number' }),
+    lobbyId: uuid('lobby_id')
+      .notNull()
+      .references(() => lobbies.id, { onDelete: 'cascade' }),
+    memberId: uuid('member_id').references(() => lobbyMembers.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 40 }).$type<NotificationKind>().notNull(),
+    /** At most one pending row per key (debounce). */
+    dedupeKey: varchar('dedupe_key', { length: 120 }),
+    sendAfter: timestamp('send_after', { withTimezone: true }).notNull(),
+    attempts: smallint('attempts').notNull().default(0),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    failedAt: timestamp('failed_at', { withTimezone: true }),
+    lastErrorCode: smallint('last_error_code'),
+    telegramMessageId: bigint('telegram_message_id', { mode: 'number' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('notifications_due_idx')
+      .on(t.sendAfter)
+      .where(sql`${t.sentAt} is null and ${t.failedAt} is null`),
+    uniqueIndex('notifications_pending_dedupe_uq')
+      .on(t.dedupeKey)
+      .where(sql`${t.sentAt} is null and ${t.failedAt} is null`),
+    index('notifications_lobby_kind_idx').on(t.lobbyId, t.kind),
+    check('notifications_target_chk', sql`(${t.userId} is null) <> (${t.chatId} is null)`),
+  ],
+);
+
+/** A member's answer to «Как прошла встреча?»; one per lobby and user. */
+export const lobbyFeedback = pgTable(
+  'lobby_feedback',
+  {
+    lobbyId: uuid('lobby_id')
+      .notNull()
+      .references(() => lobbies.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    rating: feedbackRatingEnum('rating').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.lobbyId, t.userId] })],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Interest = typeof interests.$inferSelect;
@@ -242,3 +337,4 @@ export type NewLobby = typeof lobbies.$inferInsert;
 export type LobbyMember = typeof lobbyMembers.$inferSelect;
 export type KarmaEvent = typeof karmaEvents.$inferSelect;
 export type ApplicationEvent = typeof applicationEvents.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;

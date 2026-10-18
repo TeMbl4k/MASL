@@ -4,6 +4,7 @@
     "outDir": "./dist",
     "resolvePackageJsonExports": true,
     "removeComments": true,
+    "declaration": false,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
