@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     CREATION_BLOCKED_APPEAL,
-    CREATION_BLOCKED_TITLE,
+    CREATION_BLOCKED_TITLES,
     formatRetryAfter,
     type CreationContextDto,
   } from '@masl/shared';
@@ -47,7 +47,7 @@
         };
       case 'blocked':
         return {
-          title: CREATION_BLOCKED_TITLE,
+          title: CREATION_BLOCKED_TITLES[context.blockKind ?? 'late_cancel'],
           text: `${CREATION_BLOCKED_APPEAL}.`,
           link: 'home',
         };

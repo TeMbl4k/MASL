@@ -6,15 +6,17 @@ import {
   HOSTED_UPCOMING_MAX,
   LOBBIES_PER_DAY_MAX,
   CREATION_BLOCKED_APPEAL,
-  CREATION_BLOCKED_TITLE,
+  CREATION_BLOCKED_TITLES,
   PLACE_TOO_FAR_MESSAGE,
   START_ISSUE_MESSAGES,
   type ApiErrorCode,
+  type CreationBlockKind,
   type ApiErrorDto,
 } from '@masl/shared';
 
 /** Codes whose message needs data; every other code has a constant message. */
 interface ApiErrorParams {
+  creation_blocked: { kind: CreationBlockKind };
   daily_limit: { newbie: boolean; retryAt: Date; now: Date };
   karma_too_low: { minKarma: number; karma: number };
   appeal_too_soon: { retryAt: Date; now: Date };
@@ -84,7 +86,7 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, HttpStatus>> = {
  */
 const MESSAGES: MessageMap = {
   not_onboarded: 'Сначала заполните профиль',
-  creation_blocked: `${CREATION_BLOCKED_TITLE}. ${CREATION_BLOCKED_APPEAL}`,
+  creation_blocked: ({ kind }) => `${CREATION_BLOCKED_TITLES[kind]}. ${CREATION_BLOCKED_APPEAL}`,
   daily_limit: ({ newbie, retryAt, now }) =>
     newbie
       ? `Новичкам доступна одна встреча в сутки. Следующую можно создать ${formatRetryAfter(retryAt, now)}`

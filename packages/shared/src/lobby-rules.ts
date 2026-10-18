@@ -13,7 +13,7 @@ import {
   PLACE_MAX_FROM_METRO_M,
   VIEWER_COORD_DECIMALS,
 } from './constants.js';
-import type { ApiErrorCode, AttendanceState, LobbyStatus } from './enums.js';
+import type { ApiErrorCode, AttendanceState, CreationBlockKind, LobbyStatus } from './enums.js';
 import { asDate, DAY_MS, HOUR_MS, type Instant, MINUTE_MS } from './time.js';
 
 /**
@@ -131,9 +131,12 @@ export function meetsMinKarma(karma: number, minKarma: number | null): boolean {
   return minKarma === null || karma >= minKarma;
 }
 
-/** Why a host can't create lobbies after a late cancel of a full one (stage 3 §10). */
-export const CREATION_BLOCKED_TITLE = 'Создание встреч заблокировано после отмены в последний час';
-export const CREATION_BLOCKED_APPEAL = 'Обжаловать можно будет позже';
+/** Why a host can't create lobbies: a late cancel of a full lobby (stage 3 §10) or a moderator. */
+export const CREATION_BLOCKED_TITLES: Readonly<Record<CreationBlockKind, string>> = {
+  late_cancel: 'Создание встреч заблокировано после отмены в последний час',
+  moderation: 'Создание встреч заблокировано решением модерации',
+};
+export const CREATION_BLOCKED_APPEAL = 'Подать апелляцию можно в профиле';
 
 /** After a rejected appeal, the next one is allowed from this moment. */
 export function appealRetryAt(decidedAt: Instant): Date {

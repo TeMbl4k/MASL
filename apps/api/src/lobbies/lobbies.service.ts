@@ -124,6 +124,7 @@ export class LobbiesService {
       upcomingLimit: limits.upcomingLimit,
       upcomingCount: limits.upcomingCount,
       addressSuggest: Boolean(this.env.DADATA_API_KEY),
+      blockKind: reason === 'blocked' ? viewer.creationBlockKind : null,
     };
   }
 
@@ -141,7 +142,9 @@ export class LobbiesService {
       await this.lockActor(tx, userId);
       const viewer = await this.viewer(tx, userId, now);
       if (!viewer.onboarded) throw apiError('not_onboarded');
-      if (viewer.lobbyCreationBlocked) throw apiError('creation_blocked');
+      if (viewer.lobbyCreationBlocked) {
+        throw apiError('creation_blocked', { kind: viewer.creationBlockKind ?? 'late_cancel' });
+      }
 
       const [existing] = await tx
         .select({ id: lobbies.id })

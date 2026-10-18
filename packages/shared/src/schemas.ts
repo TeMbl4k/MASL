@@ -486,6 +486,8 @@ export const creationContextDto = z.strictObject({
   upcomingCount: z.number().int(),
   /** DaData address suggestions are configured. */
   addressSuggest: z.boolean(),
+  /** reason 'blocked': why. */
+  blockKind: z.enum(CREATION_BLOCK_KINDS).nullable(),
 });
 export type CreationContextDto = z.infer<typeof creationContextDto>;
 

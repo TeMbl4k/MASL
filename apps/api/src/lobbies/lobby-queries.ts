@@ -38,6 +38,7 @@ import {
   LOBBY_CREATE_WINDOW_HOURS,
   OCCUPYING_MEMBERSHIP_STATUSES,
   roundViewerCoord,
+  type CreationBlockKind,
   type LobbyCategory,
   type LobbyStatus,
 } from '@masl/shared';
@@ -475,6 +476,8 @@ export interface ViewerContext {
   karma: number;
   onboarded: boolean;
   lobbyCreationBlocked: boolean;
+  /** Why creation is blocked; null when it isn't. */
+  creationBlockKind: CreationBlockKind | null;
   interests: LobbyCategory[];
   /** Pending applications on lobbies that have not started and are not cancelled. */
   pendingApplications: number;
@@ -496,6 +499,7 @@ export async function loadViewerContext(
       karma: users.karma,
       onboardedAt: users.onboardedAt,
       lobbyCreationBlocked: users.lobbyCreationBlocked,
+      creationBlockKind: users.creationBlockedReason,
     })
     .from(users)
     .where(eq(users.id, userId));
@@ -532,6 +536,7 @@ export async function loadViewerContext(
     karma: user.karma,
     onboarded: user.onboardedAt !== null,
     lobbyCreationBlocked: user.lobbyCreationBlocked,
+    creationBlockKind: user.creationBlockKind,
     // Interest slugs and lobby categories share their values (decisions.md).
     interests: interestRows.map((r) => r.slug as LobbyCategory),
     pendingApplications: pending?.n ?? 0,

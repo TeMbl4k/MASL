@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CREATION_BLOCKED_TITLE, type CreationContextDto } from '@masl/shared';
+  import { CREATION_BLOCKED_TITLES, type CreationContextDto } from '@masl/shared';
   import { onMount } from 'svelte';
   import { api } from '#lib/api.js';
   import Avatar from '#lib/components/Avatar.svelte';
@@ -65,7 +65,7 @@
           role="status"
         >
           <Alert size={18} class="shrink-0 text-brand-light" />
-          {CREATION_BLOCKED_TITLE}
+          {CREATION_BLOCKED_TITLES[creation.blockKind ?? 'late_cancel']}
         </p>
       {/if}
 

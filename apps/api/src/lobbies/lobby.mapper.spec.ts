@@ -26,6 +26,7 @@ const viewer = (patch: Partial<ViewerContext> = {}): ViewerContext => ({
   karma: 50,
   onboarded: true,
   lobbyCreationBlocked: false,
+  creationBlockKind: null,
   interests: ['sport'],
   pendingApplications: 0,
   applicationsInWindow: 0,
