@@ -7,7 +7,15 @@ declare global {
     // interface PageData {}
     /** Shallow-routing state: an open sheet is a history entry, so Back closes it. */
     interface PageState {
-      sheet?: 'origin' | 'station' | 'map-place' | 'cancel-lobby' | 'interests';
+      sheet?:
+        | 'origin'
+        | 'station'
+        | 'map-place'
+        | 'cancel-lobby'
+        | 'interests'
+        | 'report'
+        | 'appeal'
+        | 'moderation-action';
       /** Station id of the open `map-place` sheet. */
       placeKey?: string;
     }

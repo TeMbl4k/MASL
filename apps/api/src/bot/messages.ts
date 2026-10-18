@@ -6,7 +6,7 @@ import {
   formatMoscow,
   formatMoscowTime,
   type Instant,
-  type LobbyCancelReason,
+  type LobbyCancelReasonOut,
 } from '@masl/shared';
 
 /**
@@ -86,7 +86,7 @@ export const texts = {
     ].join('\n'),
   memberRejected: (title: string) =>
     `Заявку на «${title}» не приняли. Загляните в ленту: там есть и другие встречи.`,
-  memberLobbyCancelled: (m: MeetupRef, reason: LobbyCancelReason | null, comment: string | null) =>
+  memberLobbyCancelled: (m: MeetupRef, reason: LobbyCancelReasonOut | null, comment: string | null) =>
     [
       `Встречу «${m.title}» (${formatMeetupWhen(m.startsAt, m.endsAt)}) отменили.`,
       reason ? `Причина: ${LOBBY_CANCEL_REASON_LABELS[reason]}.` : null,
@@ -143,6 +143,20 @@ export const texts = {
     `В чате встречи «${title}» у бота нет прав: ${missing.join(', ')}. Без них бот не сможет пускать участников.`,
   chatPickerPrompt: 'Нажмите кнопку ниже и выберите или создайте группу для встречи.',
   chatPickerButton: 'Выбрать группу',
+
+  moderatorShadowBan: (firstName: string, reports: number, reasons: string[]) =>
+    `Теневой бан для ${firstName}. Жалоб: ${reports} (${reasons.join(', ')}).`,
+  moderatorAppeal: (firstName: string) => `Новая апелляция от ${firstName}.`,
+  moderatorNotHeld: (title: string) => `Встреча «${title}» могла не состояться: так ответил участник.`,
+  userAppealApproved: (refund: number | null) =>
+    [
+      'Блокировку создания встреч сняли. Можно снова собирать людей.',
+      refund ? `Карму вернули: ${signed(refund)}.` : null,
+    ]
+      .filter((line) => line !== null)
+      .join('\n'),
+  userAppealRejected: (reason: string, retryAt: Instant) =>
+    `Апелляцию отклонили: ${reason}. Повторно можно с ${formatMoscow(retryAt, { day: 'numeric', month: 'long' })}.`,
 };
 
 /** Admin rights the bot needs in the meetup group, with their names in BotFather's terms. */

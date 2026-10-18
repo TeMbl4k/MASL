@@ -197,7 +197,7 @@ export class LobbyDraft implements DraftValues {
       place,
       distanceM: null,
       host,
-      viewer: { isHost: true, membershipStatus: null, applyBlock: null },
+      viewer: { isHost: true, membershipStatus: null, applyBlock: null, reported: false },
     };
   }
 

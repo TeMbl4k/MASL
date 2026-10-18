@@ -20,15 +20,18 @@ import { classifyTelegramError, describeTelegramError } from './telegram-errors.
 
 export type OutboxTarget = { userId: string; chatId?: never } | { chatId: number; userId?: never };
 
-export type OutboxMessage = OutboxTarget & {
-  kind: NotificationKind;
-  lobbyId: string;
-  memberId?: string;
-  /** Not before this moment; default now. */
-  sendAfter?: Date;
-  /** At most one pending row per key: a repeat while one waits is dropped (debounce). */
-  dedupeKey?: string;
-};
+/** What the message is about: a lobby, or a moderation case. */
+export type OutboxSubject = { lobbyId: string; caseId?: never } | { caseId: string; lobbyId?: never };
+
+export type OutboxMessage = OutboxTarget &
+  OutboxSubject & {
+    kind: NotificationKind;
+    memberId?: string;
+    /** Not before this moment; default now. */
+    sendAfter?: Date;
+    /** At most one pending row per key: a repeat while one waits is dropped (debounce). */
+    dedupeKey?: string;
+  };
 
 const POLL_INTERVAL_MS = 1000;
 const BATCH = 20;
@@ -102,7 +105,8 @@ export class OutboxService implements OnApplicationBootstrap, OnApplicationShutd
         messages.map((m) => ({
           userId: m.userId ?? null,
           chatId: m.chatId ?? null,
-          lobbyId: m.lobbyId,
+          lobbyId: m.lobbyId ?? null,
+          caseId: m.caseId ?? null,
           memberId: m.memberId ?? null,
           kind: m.kind,
           dedupeKey: m.dedupeKey ?? null,

@@ -30,12 +30,14 @@
   import MeetupChatCard from '#lib/components/MeetupChatCard.svelte';
   import MemberList from '#lib/components/MemberList.svelte';
   import PageHeader from '#lib/components/PageHeader.svelte';
+  import ReportSheet from '#lib/components/ReportSheet.svelte';
   import StatusPill from '#lib/components/StatusPill.svelte';
   import { describeError, isAbort } from '#lib/errors.js';
   import { formatShortDate } from '#lib/format/datetime.js';
   import { LOBBY_CANCEL_REASON_LABELS } from '#lib/format/labels.js';
   import { session } from '#lib/session.svelte.js';
   import { appActivity, clock, usePolling } from '#lib/stores/clock.svelte.js';
+  import { feed } from '#lib/stores/feed.svelte.js';
   import { filters } from '#lib/stores/filters.svelte.js';
   import { lobbyCache } from '#lib/stores/lobbies.svelte.js';
   import { origin } from '#lib/stores/origin.svelte.js';
@@ -95,6 +97,17 @@
       if (shown.kind === 'update') toast.error(error);
       else loadError = shown.text;
     }
+  }
+
+  /** A reporter who is not a member no longer sees the lobby: back to the feed without it. */
+  function reported(hidden: boolean) {
+    if (!hidden) {
+      toast.show('Жалоба отправлена', 'success');
+      return;
+    }
+    toast.show('Жалоба отправлена. Эту встречу вы больше не увидите', 'success');
+    void feed.refresh();
+    void goto('/', { replace: true });
   }
 
   // Loads on open, on another lobby id, and when the app comes back to the front.
@@ -324,14 +337,19 @@
 
     <div class="flex flex-col gap-[1.125rem] px-5 pt-5">
       {#if situation === 'cancelled'}
+        {@const byModerator = detail?.cancelReason === 'moderation'}
         <div
           class="flex flex-col gap-3 rounded-[1.125rem] border border-brand-deep/60 bg-brand-deep/15 p-4"
           role="status"
         >
           <span class="font-semibold"
-            >{lobby.viewer.isHost ? 'Вы отменили встречу' : 'Встреча отменена хостом'}</span
+            >{byModerator
+              ? 'Встречу отменила модерация'
+              : lobby.viewer.isHost
+                ? 'Вы отменили встречу'
+                : 'Встреча отменена хостом'}</span
           >
-          {#if detail?.cancelReason}
+          {#if detail?.cancelReason && !byModerator}
             <span class="text-sm">Причина: {LOBBY_CANCEL_REASON_LABELS[detail.cancelReason]}</span>
           {/if}
           {#if detail?.cancelComment}
@@ -514,6 +532,19 @@
             {/if}
           </div>
         {/if}
+        {#if !lobby.viewer.isHost}
+          {#if lobby.viewer.reported}
+            <p class="pt-2 text-center text-sm text-gray-light">Вы пожаловались</p>
+          {:else}
+            <button
+              type="button"
+              class="min-h-11 self-center px-4 text-sm text-gray-light underline underline-offset-4"
+              onclick={() => void openSheet('report')}
+            >
+              Пожаловаться
+            </button>
+          {/if}
+        {/if}
       {:else if loadError}
         <ErrorState title="Не удалось загрузить встречу" message={loadError} onretry={() => void load()} />
       {:else}
@@ -529,4 +560,7 @@
 
 {#if lobby && situation === 'host'}
   <CancelLobbySheet {lobby} ondone={() => void load()} />
+{/if}
+{#if lobby && !lobby.viewer.isHost && !lobby.viewer.reported}
+  <ReportSheet lobbyId={lobby.id} ondone={reported} />
 {/if}

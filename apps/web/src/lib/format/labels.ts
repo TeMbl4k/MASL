@@ -7,7 +7,12 @@ import {
   type KarmaReason,
   type LobbyStatus,
   type MembershipStatus,
+  type ModerationAction,
+  type ModerationCaseKind,
+  type ModerationDecision,
   type PaymentFormat,
+  type ReportNotCounted,
+  type UserRole,
 } from '@masl/shared';
 import { formatCountdown } from './datetime.js';
 
@@ -17,10 +22,53 @@ export const KARMA_REASON_LABELS: Readonly<Record<KarmaReason, string>> = {
   no_show: 'Не пришли',
   host_late_cancel: 'Поздняя отмена встречи хостом',
   hosted: 'Провели встречу',
-  manual: 'Изменение модератором',
+  manual: 'Решение модерации',
+  moderation: 'Решение модерации',
+  appeal_refund: 'Возврат по апелляции',
 };
 
-export { LOBBY_CANCEL_REASON_LABELS } from '@masl/shared';
+export { LOBBY_CANCEL_REASON_LABELS, REPORT_REASON_LABELS } from '@masl/shared';
+
+/** Moderators only: why a report doesn't count toward the shadow ban. */
+export const REPORT_NOT_COUNTED_LABELS: Readonly<Record<ReportNotCounted, string>> = {
+  shadow_banned: 'у автора теневой бан',
+  new_account: 'аккаунту меньше суток',
+  same_reporter: 'тот же человек уже жаловался',
+};
+
+export const CASE_KIND_LABELS: Readonly<Record<ModerationCaseKind, string>> = {
+  reports: 'Жалобы',
+  not_held: 'Не состоялась',
+  appeal: 'Апелляция',
+};
+
+export const DECISION_LABELS: Readonly<Record<ModerationDecision, string>> = {
+  reports_confirmed: 'Нарушение подтверждено',
+  reports_dismissed: 'Жалобы не подтвердились',
+  meetup_held: 'Встреча состоялась',
+  host_flaked: 'Организатор сорвал встречу',
+  appeal_approved: 'Блокировка снята',
+  appeal_rejected: 'Апелляция отклонена',
+};
+
+export const MODERATION_ACTION_LABELS: Readonly<Record<ModerationAction, string>> = {
+  auto_shadow_ban: 'Теневой бан: независимые жалобы',
+  shadow_ban: 'Теневой бан',
+  lift_shadow_ban: 'Теневой бан снят',
+  block_creation: 'Запрет создавать встречи',
+  unblock_creation: 'Создание встреч разрешено',
+  karma_change: 'Карма изменена',
+  cancel_lobby: 'Встреча отменена',
+  grant_moderator: 'Назначен модератором',
+  revoke_moderator: 'Снят с модераторов',
+  resolve_case: 'Решение по делу',
+};
+
+export const ROLE_LABELS: Readonly<Record<UserRole, string>> = {
+  user: 'Пользователь',
+  moderator: 'Модератор',
+  admin: 'Админ',
+};
 
 export const PAYMENT_FORMAT_LABELS: Readonly<Record<PaymentFormat, string>> = {
   free: 'Бесплатно',

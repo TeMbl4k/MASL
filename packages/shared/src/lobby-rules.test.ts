@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  appealRetryAt,
   attendanceDeadline,
   attendanceState,
   checkInWindow,
@@ -201,5 +202,11 @@ describe('attendanceState', () => {
     expect(attendanceState({ ...base, attendanceSavedAt: now }, at(HOUR))).toBe('saved');
     expect(attendanceState({ ...base, attendanceClosedAt: now }, at(HOUR))).toBe('closed');
     expect(attendanceState({ ...base, status: 'cancelled' }, at(HOUR))).toBe('not_yet');
+  });
+});
+
+describe('appealRetryAt', () => {
+  it('allows the next appeal 7 days after a rejection', () => {
+    expect(appealRetryAt(now).getTime() - now.getTime()).toBe(7 * DAY);
   });
 });

@@ -7,7 +7,9 @@ import {
   lobbies,
   lobbyFeedback,
   lobbyMembers,
+  moderationCases,
   notifications,
+  reports,
   users,
   type Database,
   type Notification,
@@ -15,6 +17,9 @@ import {
 import {
   FEEDBACK_MEMBERSHIP_STATUSES,
   NEWBIE_ATTENDED_MIN,
+  REPORT_REASONS,
+  REPORT_REASON_LABELS,
+  appealRetryAt,
   attendanceDeadline,
   attendanceState,
   effectiveLobbyStatus,
@@ -24,8 +29,10 @@ import {
   type MembershipStatus,
 } from '@masl/shared';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
+import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { parseCancelReason } from '../lobbies/lobby.mapper.js';
+import { userRole } from '../moderation/roles.js';
 import {
   approvedCountSql,
   attendedCountSql,
@@ -157,9 +164,12 @@ export class OutboxRenderer {
     @Inject(DB) private readonly db: Database,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(AppLinks) private readonly links: AppLinks,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async render(row: Notification): Promise<TelegramCall[] | null> {
+    if (row.caseId !== null) return this.renderCase(row, row.caseId);
+    if (row.lobbyId === null) return null;
     const lobby = await loadLobby(this.db, row.lobbyId);
     if (!lobby) return null;
     const status = effectiveLobbyStatus(lobby, this.clock.now());
@@ -370,6 +380,117 @@ export class OutboxRenderer {
       default:
         return null;
     }
+  }
+
+  /**
+   * Moderation messages (stage 4 §5): a new case to moderators while they still are moderators
+   * and the case is open; an appeal's outcome to its author. Reporters and report comments are
+   * never in them.
+   */
+  private async renderCase(row: Notification, caseId: string): Promise<TelegramCall[] | null> {
+    const [kase] = await this.db
+      .select({
+        kind: moderationCases.kind,
+        subjectId: moderationCases.subjectId,
+        lobbyId: moderationCases.lobbyId,
+        resolvedAt: moderationCases.resolvedAt,
+        decision: moderationCases.decision,
+        decisionComment: moderationCases.decisionComment,
+        subjectFirstName: users.firstName,
+      })
+      .from(moderationCases)
+      .innerJoin(users, eq(users.id, moderationCases.subjectId))
+      .where(eq(moderationCases.id, caseId));
+    const [recipient] = await this.db
+      .select({ telegramId: users.telegramId, isModerator: users.isModerator })
+      .from(users)
+      .where(eq(users.id, row.userId!));
+    if (!kase || !recipient) return null;
+    let message: PrivateMessage | null = null;
+    switch (row.kind) {
+      case 'moderator_new_case': {
+        if (kase.resolvedAt !== null || userRole(recipient, this.env.ADMIN_TELEGRAM_IDS) === 'user')
+          return null;
+        const text = await this.newCaseText(caseId, kase);
+        if (text === null) return null;
+        message = {
+          text,
+          markup: keyboard([[await this.links.button('Открыть', appPaths.adminCase(caseId))]]),
+        };
+        break;
+      }
+      case 'user_appeal_approved': {
+        if (kase.decision !== 'appeal_approved' || row.userId !== kase.subjectId) return null;
+        const [refund] =
+          kase.lobbyId === null
+            ? []
+            : await this.db
+                .select({ delta: karmaEvents.delta })
+                .from(karmaEvents)
+                .where(
+                  and(
+                    eq(karmaEvents.userId, kase.subjectId),
+                    eq(karmaEvents.lobbyId, kase.lobbyId),
+                    eq(karmaEvents.reason, 'appeal_refund'),
+                  ),
+                );
+        message = {
+          text: texts.userAppealApproved(refund?.delta ?? null),
+          markup: keyboard([[await this.links.button('Открыть профиль', appPaths.profile())]]),
+        };
+        break;
+      }
+      case 'user_appeal_rejected': {
+        if (
+          kase.decision !== 'appeal_rejected' ||
+          kase.resolvedAt === null ||
+          row.userId !== kase.subjectId
+        ) {
+          return null;
+        }
+        message = {
+          text: texts.userAppealRejected(kase.decisionComment ?? '', appealRetryAt(kase.resolvedAt)),
+          markup: keyboard([[await this.links.button('Открыть профиль', appPaths.profile())]]),
+        };
+        break;
+      }
+      default:
+        return null;
+    }
+    return [
+      {
+        method: 'sendMessage',
+        payload: {
+          chat_id: recipient.telegramId,
+          text: message.text,
+          reply_markup: message.markup,
+          link_preview_options: { is_disabled: true },
+        },
+      },
+    ];
+  }
+
+  private async newCaseText(
+    caseId: string,
+    kase: { kind: string; lobbyId: string | null; subjectFirstName: string },
+  ): Promise<string | null> {
+    if (kase.kind === 'appeal') return texts.moderatorAppeal(kase.subjectFirstName);
+    if (kase.kind === 'not_held') {
+      if (kase.lobbyId === null) return null;
+      const [lobby] = await this.db
+        .select({ title: lobbies.title })
+        .from(lobbies)
+        .where(eq(lobbies.id, kase.lobbyId));
+      return lobby ? texts.moderatorNotHeld(lobby.title) : null;
+    }
+    const rows = await this.db
+      .select({ reason: reports.reason })
+      .from(reports)
+      .where(eq(reports.caseId, caseId));
+    const reasons = REPORT_REASONS.filter((r) => rows.some((row) => row.reason === r)).map((r) =>
+      REPORT_REASON_LABELS[r].toLowerCase(),
+    );
+    return texts.moderatorShadowBan(kase.subjectFirstName, rows.length, reasons);
   }
 
   private async memberOf(memberId: string) {

@@ -17,36 +17,42 @@ const MEMBERSHIPS: Record<string, LobbyAccessInput['membership']> = {
   no_show: { status: 'no_show', decidedAt: DECIDED },
 };
 
-/** Expectations straight from the access matrix of spec §5.5, per membership state. */
+/** Expectations straight from the access matrix of spec §5.5, per membership state (stage 4: reports too). */
 const KEEPS_BANNED_HOST_VISIBLE = new Set(['pending', 'approved', 'attended', 'no_show']);
 const SEES_MEMBERS = new Set(['approved', 'attended']);
 
 describe('resolveLobbyAccess (T-ACC-1)', () => {
-  const cases: [string, LobbyStatus, boolean][] = [];
+  const cases: [string, LobbyStatus, boolean, boolean][] = [];
   for (const name of Object.keys(MEMBERSHIPS)) {
     for (const status of LOBBY_STATUSES) {
-      for (const banned of [false, true]) cases.push([name, status, banned]);
+      for (const banned of [false, true]) {
+        for (const reported of [false, true]) cases.push([name, status, banned, reported]);
+      }
     }
   }
 
-  it.each(cases)('non-host, membership %s, lobby %s, host banned %s', (name, status, banned) => {
-    const result = resolveLobbyAccess({
-      viewerId: VIEWER,
-      hostId: HOST,
-      hostShadowBanned: banned,
-      membership: MEMBERSHIPS[name]!,
-      effectiveStatus: status,
-    });
-    const exact = name === 'approved' && (status === 'open' || status === 'active');
-    expect(result).toEqual({
-      visible: !banned || KEEPS_BANNED_HOST_VISIBLE.has(name),
-      isHost: false,
-      access: exact ? 'member' : 'public',
-      canSeeExactPlace: exact,
-      canSeeMembers: SEES_MEMBERS.has(name),
-      canManage: false,
-    });
-  });
+  it.each(cases)(
+    'non-host, membership %s, lobby %s, host banned %s, reported %s',
+    (name, status, banned, reported) => {
+      const result = resolveLobbyAccess({
+        viewerId: VIEWER,
+        hostId: HOST,
+        hostShadowBanned: banned,
+        viewerReported: reported,
+        membership: MEMBERSHIPS[name]!,
+        effectiveStatus: status,
+      });
+      const exact = name === 'approved' && (status === 'open' || status === 'active');
+      expect(result).toEqual({
+        visible: (!banned && !reported) || KEEPS_BANNED_HOST_VISIBLE.has(name),
+        isHost: false,
+        access: exact ? 'member' : 'public',
+        canSeeExactPlace: exact,
+        canSeeMembers: SEES_MEMBERS.has(name),
+        canManage: false,
+      });
+    },
+  );
 
   it.each(LOBBY_STATUSES.flatMap((status) => [false, true].map((banned) => [status, banned] as const)))(
     'host, lobby %s, banned %s: always visible, exact place and members',
@@ -56,6 +62,7 @@ describe('resolveLobbyAccess (T-ACC-1)', () => {
           viewerId: HOST,
           hostId: HOST,
           hostShadowBanned: banned,
+          viewerReported: false,
           membership: null,
           effectiveStatus: status,
         }),
@@ -76,6 +83,7 @@ describe('resolveLobbyAccess (T-ACC-1)', () => {
         viewerId: VIEWER,
         hostId: HOST,
         hostShadowBanned: false,
+        viewerReported: false,
         membership: { status, decidedAt: DECIDED },
         effectiveStatus,
       }).canSeeExactPlace;

@@ -132,7 +132,7 @@ describe.skipIf(!adminUrl)('lobby creation limits e2e (requires TEST_DATABASE_UR
     expect(response.json()).toEqual({
       statusCode: 403,
       code: 'creation_blocked',
-      message: 'Создание встреч заблокировано после отмены в последний час. Обжаловать можно будет позже',
+      message: 'Создание встреч заблокировано после отмены в последний час. Подать апелляцию можно в профиле',
     });
     expect(await hostedCount(host.user.id)).toBe(0);
 

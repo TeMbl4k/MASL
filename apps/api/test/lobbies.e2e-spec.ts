@@ -351,6 +351,7 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
         upcomingLimit: HOSTED_UPCOMING_MAX,
         upcomingCount: 0,
         addressSuggest: false,
+        blockKind: null,
       });
 
       const created = await t.createLobby(host.token);
@@ -557,6 +558,7 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
         isHost: false,
         membershipStatus: 'pending',
         applyBlock: null,
+        reported: false,
       });
       expect(byId.get(shown.withdrawn.id)!.viewer).toMatchObject({
         membershipStatus: 'cancelled',

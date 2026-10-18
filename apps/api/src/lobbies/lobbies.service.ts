@@ -1,5 +1,5 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gt, inArray, ne } from 'drizzle-orm';
 import { lobbies, lobbyMembers, users, type Database, type GeoPoint } from '@masl/db';
 import {
   HOSTED_UPCOMING_MAX,
@@ -30,6 +30,7 @@ import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
 import { KarmaService, type DbTransaction } from '../karma/karma.service.js';
+import { creationBlock } from '../users/creation-block.js';
 import { resolveLobbyAccess } from './lobby-access.js';
 import { toExactPlace, toLobbyDetail, toPerson, membershipOf, type DetailAccess } from './lobby.mapper.js';
 import {
@@ -123,6 +124,7 @@ export class LobbiesService {
       upcomingLimit: limits.upcomingLimit,
       upcomingCount: limits.upcomingCount,
       addressSuggest: Boolean(this.env.DADATA_API_KEY),
+      blockKind: reason === 'blocked' ? viewer.creationBlockKind : null,
     };
   }
 
@@ -140,7 +142,9 @@ export class LobbiesService {
       await this.lockActor(tx, userId);
       const viewer = await this.viewer(tx, userId, now);
       if (!viewer.onboarded) throw apiError('not_onboarded');
-      if (viewer.lobbyCreationBlocked) throw apiError('creation_blocked');
+      if (viewer.lobbyCreationBlocked) {
+        throw apiError('creation_blocked', { kind: viewer.creationBlockKind ?? 'late_cancel' });
+      }
 
       const [existing] = await tx
         .select({ id: lobbies.id })
@@ -249,13 +253,35 @@ export class LobbiesService {
           if (applied !== null) karmaDelta = applied;
           await tx
             .update(users)
-            .set({ lobbyCreationBlocked: true, updatedAt: now })
+            .set({ ...creationBlock('late_cancel', now, lobbyId), updatedAt: now })
             .where(eq(users.id, viewerId));
         }
         await this.notifyCancelled(tx, lobbyId, now);
       }
       return { lobby: await this.detailFor(tx, { lobbyId, viewerId, now }), karmaDelta };
     });
+  }
+
+  /**
+   * A moderator's cancel (stage 4): reason `moderation`, no host penalty, members and the group
+   * told as on a host cancel. The caller holds the host's and the lobby's locks; false when the
+   * lobby is gone, cancelled or started.
+   */
+  async cancelForModeration(tx: DbTransaction, lobbyId: string, now: Date): Promise<boolean> {
+    const cancelled = await tx
+      .update(lobbies)
+      .set({
+        status: 'cancelled',
+        cancelledAt: now,
+        cancelReason: 'moderation',
+        cancelComment: null,
+        updatedAt: now,
+      })
+      .where(and(eq(lobbies.id, lobbyId), ne(lobbies.status, 'cancelled'), gt(lobbies.startsAt, now)))
+      .returning({ id: lobbies.id });
+    if (cancelled.length === 0) return false;
+    await this.notifyCancelled(tx, lobbyId, now);
+    return true;
   }
 
   /**
@@ -328,6 +354,7 @@ export class LobbiesService {
       viewerId,
       hostId: row.hostId,
       hostShadowBanned: row.hostShadowBanned,
+      viewerReported: row.viewerReported,
       membership: membershipOf(row),
       effectiveStatus,
     });

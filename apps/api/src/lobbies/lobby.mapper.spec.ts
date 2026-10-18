@@ -26,6 +26,7 @@ const viewer = (patch: Partial<ViewerContext> = {}): ViewerContext => ({
   karma: 50,
   onboarded: true,
   lobbyCreationBlocked: false,
+  creationBlockKind: null,
   interests: ['sport'],
   pendingApplications: 0,
   applicationsInWindow: 0,
@@ -172,6 +173,7 @@ describe('cards and details', () => {
     pendingCount: 2,
     memberStatus: null,
     memberDecidedAt: null,
+    viewerReported: false,
     distanceM: 1249.7,
     ...patch,
   });
@@ -180,7 +182,12 @@ describe('cards and details', () => {
     const card = toLobbyCard(row({ startsAt: new Date(NOW.getTime() - HOUR) }), viewer(), NOW);
     expect(lobbyCardDto.parse(card)).toEqual(card);
     expect(card).toMatchObject({ status: 'active', distanceM: 1200, pendingCount: null });
-    expect(card.viewer).toEqual({ isHost: false, membershipStatus: null, applyBlock: 'not_open' });
+    expect(card.viewer).toEqual({
+      isHost: false,
+      membershipStatus: null,
+      applyBlock: 'not_open',
+      reported: false,
+    });
 
     const hostCard = toLobbyCard(row(), viewer({ userId: 'host' }), NOW);
     expect(hostCard).toMatchObject({ pendingCount: 2, viewer: { isHost: true, applyBlock: 'own' } });

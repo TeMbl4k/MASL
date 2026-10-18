@@ -56,8 +56,15 @@ export const KARMA_REASONS = [
   'host_late_cancel',
   'manual',
   'hosted',
+  /** A moderator's decision on a lobby: a host flake, a member's no-show taken back. */
+  'moderation',
+  /** Karma given back on an approved appeal; once per user and lobby. */
+  'appeal_refund',
 ] as const;
 export type KarmaReason = (typeof KARMA_REASONS)[number];
+
+/** Karma events whose comment the user sees: a moderator wrote it for them. */
+export const COMMENTED_KARMA_REASONS: readonly KarmaReason[] = ['manual', 'moderation'];
 
 /** Statuses that take a lobby slot. */
 export const OCCUPYING_MEMBERSHIP_STATUSES = [
@@ -81,11 +88,16 @@ export type MetroKind = (typeof METRO_KINDS)[number];
 export const LOBBY_CANCEL_REASONS = ['not_enough_people', 'plans_changed', 'other'] as const;
 export type LobbyCancelReason = (typeof LOBBY_CANCEL_REASONS)[number];
 
+/** Stored cancel reasons: the host's, plus `moderation` for a moderator's cancel. */
+export const LOBBY_CANCEL_REASONS_OUT = [...LOBBY_CANCEL_REASONS, 'moderation'] as const;
+export type LobbyCancelReasonOut = (typeof LOBBY_CANCEL_REASONS_OUT)[number];
+
 /** Shown in the app and in the bot's messages. */
-export const LOBBY_CANCEL_REASON_LABELS: Readonly<Record<LobbyCancelReason, string>> = {
+export const LOBBY_CANCEL_REASON_LABELS: Readonly<Record<LobbyCancelReasonOut, string>> = {
   not_enough_people: 'Не набрались участники',
   plans_changed: 'Изменились планы',
   other: 'Другое',
+  moderation: 'Отменена модерацией',
 };
 
 /** What the viewer of a lobby detail may see: only member and host get the exact place. */
@@ -123,6 +135,9 @@ export const NOTIFICATION_KINDS = [
   'member_chat_ready',
   'member_attendance_result',
   'member_feedback_request',
+  'moderator_new_case',
+  'user_appeal_approved',
+  'user_appeal_rejected',
   'group_welcome',
   'group_finished',
   'group_cancelled',
@@ -131,7 +146,7 @@ export const NOTIFICATION_KINDS = [
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
-/** A member's answer to «Как прошла встреча?». Stored only, until stage 4. */
+/** A member's answer to «Как прошла встреча?»; `not_held` opens a moderation case. */
 export const FEEDBACK_RATINGS = ['good', 'bad', 'not_held'] as const;
 export type FeedbackRating = (typeof FEEDBACK_RATINGS)[number];
 
@@ -184,6 +199,18 @@ export const API_ERROR_CODES = [
   'attendance_closed',
   'attendance_saved',
   'checked_in_member',
+  'report_own_lobby',
+  'reports_daily_limit',
+  'not_blocked',
+  'appeal_open',
+  'appeal_too_soon',
+  'forbidden_moderation',
+  'case_not_found',
+  'case_resolved',
+  'decision_mismatch',
+  'user_not_found',
+  'self_moderation',
+  'admin_only',
   'rate_limited',
   'conflict',
   'invalid_data',
@@ -191,3 +218,87 @@ export const API_ERROR_CODES = [
   'internal_error',
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
+
+/** Why a lobby is reported. */
+export const REPORT_REASONS = ['promo', 'scam', 'abuse', 'other'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+export const REPORT_REASON_LABELS: Readonly<Record<ReportReason, string>> = {
+  promo: 'Реклама или промо',
+  scam: 'Мошенничество',
+  abuse: 'Оскорбления или опасность',
+  other: 'Другое',
+};
+
+/**
+ * Why a report doesn't count toward the shadow ban, in check order; moderators only. Reporters
+ * are always onboarded (reporting requires it).
+ */
+export const REPORT_NOT_COUNTED = ['shadow_banned', 'new_account', 'same_reporter'] as const;
+export type ReportNotCounted = (typeof REPORT_NOT_COUNTED)[number];
+
+/** What a moderation case is about: reports on a host, a «Не состоялась» answer, an appeal. */
+export const MODERATION_CASE_KINDS = ['reports', 'not_held', 'appeal'] as const;
+export type ModerationCaseKind = (typeof MODERATION_CASE_KINDS)[number];
+
+export const MODERATION_CASE_STATUSES = ['open', 'resolved'] as const;
+export type ModerationCaseStatus = (typeof MODERATION_CASE_STATUSES)[number];
+
+export const MODERATION_DECISIONS = [
+  'reports_dismissed',
+  'reports_confirmed',
+  'meetup_held',
+  'host_flaked',
+  'appeal_approved',
+  'appeal_rejected',
+] as const;
+export type ModerationDecision = (typeof MODERATION_DECISIONS)[number];
+
+/** The decisions that close a case of each kind. */
+export const CASE_DECISIONS: Readonly<Record<ModerationCaseKind, readonly ModerationDecision[]>> = {
+  reports: ['reports_confirmed', 'reports_dismissed'],
+  not_held: ['meetup_held', 'host_flaked'],
+  appeal: ['appeal_approved', 'appeal_rejected'],
+};
+
+/** Entries of the moderation log; `auto_shadow_ban` has no actor. */
+export const MODERATION_ACTIONS = [
+  'auto_shadow_ban',
+  'shadow_ban',
+  'lift_shadow_ban',
+  'block_creation',
+  'unblock_creation',
+  'karma_change',
+  'cancel_lobby',
+  'grant_moderator',
+  'revoke_moderator',
+  'resolve_case',
+] as const;
+export type ModerationAction = (typeof MODERATION_ACTIONS)[number];
+
+/** What a moderator can do from a user card. */
+export const USER_MODERATION_ACTIONS = [
+  'shadow_ban',
+  'lift_shadow_ban',
+  'block_creation',
+  'unblock_creation',
+  'karma_change',
+  'grant_moderator',
+  'revoke_moderator',
+] as const satisfies readonly ModerationAction[];
+export type UserModerationAction = (typeof USER_MODERATION_ACTIONS)[number];
+
+/** Only admins appoint and dismiss moderators. */
+export const ADMIN_ONLY_ACTIONS: readonly UserModerationAction[] = ['grant_moderator', 'revoke_moderator'];
+
+/** Why lobby creation is blocked: a host flake (stage 3) or a moderator's decision. */
+export const CREATION_BLOCK_KINDS = ['late_cancel', 'moderation'] as const;
+export type CreationBlockKind = (typeof CREATION_BLOCK_KINDS)[number];
+
+/** Admin = Telegram id in ADMIN_TELEGRAM_IDS; moderator = users.is_moderator. */
+export const USER_ROLES = ['user', 'moderator', 'admin'] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
+/** Where the user's latest appeal stands. */
+export const APPEAL_STATUSES = ['open', 'approved', 'rejected'] as const;
+export type AppealStatus = (typeof APPEAL_STATUSES)[number];

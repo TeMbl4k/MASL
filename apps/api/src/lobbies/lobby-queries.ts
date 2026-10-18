@@ -22,6 +22,7 @@ import {
   karmaEvents,
   lobbies,
   lobbyMembers,
+  reports,
   userInterests,
   users,
   type Database,
@@ -37,6 +38,7 @@ import {
   LOBBY_CREATE_WINDOW_HOURS,
   OCCUPYING_MEMBERSHIP_STATUSES,
   roundViewerCoord,
+  type CreationBlockKind,
   type LobbyCategory,
   type LobbyStatus,
 } from '@masl/shared';
@@ -115,6 +117,16 @@ const pendingCountSql =
     Number,
   );
 
+/** The viewer reported the lobby (stage 4). */
+function viewerReportedSql(viewerId: string) {
+  return sql<boolean>`exists (select 1 from ${reports} where ${reports.reporterId} = ${viewerId} and ${reports.lobbyId} = ${outer(lobbies, lobbies.id)})`.mapWith(
+    Boolean,
+  );
+}
+
+/** Memberships that keep a hidden lobby (banned host, reported) in the member's lists. */
+const KEEPS_VISIBLE_STATUSES = ['pending', 'approved', 'attended', 'no_show'] as const;
+
 /**
  * Columns of a lobby card as `viewerId` sees it. `pendingCount` is computed for the host only;
  * `distanceM` is the raw distance from the public point to the (rounded) origin.
@@ -134,6 +146,7 @@ function lobbyCardColumns(viewerId: string, origin: GeoPoint | null) {
     ),
     memberStatus: viewerMember.status,
     memberDecidedAt: viewerMember.decidedAt,
+    viewerReported: viewerReportedSql(viewerId),
     distanceM: origin
       ? distanceMeters(lobbies.publicLocation, origin)
       : sql<number | null>`null`.mapWith((value: unknown) => (value === null ? null : Number(value))),
@@ -182,16 +195,16 @@ const viewerPendingOrApproved = () => inArray(viewerMember.status, ['pending', '
 /**
  * What the feed, its day counts and the map may show the viewer (spec §5.7): open lobbies that
  * have not started (by `now`, not the stored status alone), not the viewer's own, not of a
- * shadow-banned host, not where the viewer was rejected or left, not full; a lobby where the
- * viewer is pending or approved stays even when full or its host is banned.
- * Needs the joins of selectLobbyCards.
+ * shadow-banned host, not reported by the viewer, not where the viewer was rejected or left, not
+ * full; a lobby where the viewer is pending or approved stays even when full, its host is banned
+ * or the viewer reported it. Needs the joins of selectLobbyCards.
  */
 export function discoverableWhere(viewerId: string, now: Date, filters: DiscoverFilters = {}): SQL {
   return and(
     eq(lobbies.status, 'open'),
     gt(lobbies.startsAt, now),
     ne(lobbies.hostId, viewerId),
-    or(not(hostUser.isShadowBanned), viewerPendingOrApproved()),
+    or(and(not(hostUser.isShadowBanned), not(viewerReportedSql(viewerId))), viewerPendingOrApproved()),
     or(
       isNull(viewerMember.id),
       and(
@@ -331,7 +344,8 @@ export function hostedLobbiesQuery(
 /**
  * Lobbies the viewer applied to. Upcoming: pending or approved on an open/active lobby. Past:
  * rejected, left, attended or no_show, plus pending/approved on a finished or cancelled lobby.
- * A withdrawn application is in neither. A shadow-banned host's lobby only while it is visible.
+ * A withdrawn application is in neither. A shadow-banned host's or a reported lobby only while
+ * it is visible.
  */
 export function joinedLobbiesQuery(
   db: Executor,
@@ -355,8 +369,8 @@ export function joinedLobbiesQuery(
       and(
         isNotNull(viewerMember.id),
         or(
-          not(hostUser.isShadowBanned),
-          inArray(viewerMember.status, ['pending', 'approved', 'attended', 'no_show']),
+          and(not(hostUser.isShadowBanned), not(viewerReportedSql(viewerId))),
+          inArray(viewerMember.status, [...KEEPS_VISIBLE_STATUSES]),
         ),
         which,
       ),
@@ -462,6 +476,8 @@ export interface ViewerContext {
   karma: number;
   onboarded: boolean;
   lobbyCreationBlocked: boolean;
+  /** Why creation is blocked; null when it isn't. */
+  creationBlockKind: CreationBlockKind | null;
   interests: LobbyCategory[];
   /** Pending applications on lobbies that have not started and are not cancelled. */
   pendingApplications: number;
@@ -483,6 +499,7 @@ export async function loadViewerContext(
       karma: users.karma,
       onboardedAt: users.onboardedAt,
       lobbyCreationBlocked: users.lobbyCreationBlocked,
+      creationBlockKind: users.creationBlockedReason,
     })
     .from(users)
     .where(eq(users.id, userId));
@@ -519,6 +536,7 @@ export async function loadViewerContext(
     karma: user.karma,
     onboarded: user.onboardedAt !== null,
     lobbyCreationBlocked: user.lobbyCreationBlocked,
+    creationBlockKind: user.creationBlockKind,
     // Interest slugs and lobby categories share their values (decisions.md).
     interests: interestRows.map((r) => r.slug as LobbyCategory),
     pendingApplications: pending?.n ?? 0,

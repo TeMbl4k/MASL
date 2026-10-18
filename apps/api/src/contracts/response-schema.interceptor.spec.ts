@@ -30,7 +30,7 @@ const card: LobbyCardDto = {
   },
   distanceM: 1200,
   host: { firstName: 'Анна', photoUrl: null, karma: 50 },
-  viewer: { isHost: false, membershipStatus: null, applyBlock: null },
+  viewer: { isHost: false, membershipStatus: null, applyBlock: null, reported: false },
 };
 
 class Handlers {

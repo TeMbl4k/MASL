@@ -33,6 +33,7 @@ import { OutboxService } from '../src/bot/outbox.service.js';
 import { loadEnv } from '../src/config/env.js';
 import { KarmaService } from '../src/karma/karma.service.js';
 import { FixedWindowStore } from '../src/rate-limit/fixed-window.store.js';
+import { CREATION_UNBLOCKED, creationBlock } from '../src/users/creation-block.js';
 import { FakeTelegram } from './fake-telegram.js';
 import { signInitData } from './init-data.helper.js';
 
@@ -325,13 +326,28 @@ export async function shiftCreatedAt(
   }
 }
 
-/** Moderation and onboarding flags only; karma changes go through addKarmaEvent. */
+/**
+ * Moderation and onboarding flags only; karma changes go through addKarmaEvent. A creation
+ * block set here is a late cancel without a lobby.
+ */
 export async function setUser(
   db: Database,
   userId: string,
-  patch: Partial<Pick<typeof users.$inferInsert, 'isShadowBanned' | 'lobbyCreationBlocked' | 'onboardedAt'>>,
+  patch: Partial<
+    Pick<typeof users.$inferInsert, 'isShadowBanned' | 'lobbyCreationBlocked' | 'onboardedAt' | 'isModerator'>
+  >,
 ) {
-  await db.update(users).set(patch).where(eq(users.id, userId));
+  const { lobbyCreationBlocked, ...rest } = patch;
+  const block =
+    lobbyCreationBlocked === undefined
+      ? {}
+      : lobbyCreationBlocked
+        ? creationBlock('late_cancel', new Date(), null)
+        : CREATION_UNBLOCKED;
+  await db
+    .update(users)
+    .set({ ...rest, ...block })
+    .where(eq(users.id, userId));
 }
 
 /** Reasons with a product delta; the others need an explicit one. */

@@ -183,7 +183,13 @@ describe.skipIf(!adminUrl)('quorum check and host late cancel e2e (requires TEST
       expect(response.statusCode, response.body).toBe(200);
       expect(cancelLobbyResponse.parse(response.json()).karmaDelta).toBe(KARMA.HOST_LATE_CANCEL);
       const [user] = await t.db.select().from(users).where(eq(users.id, host.user.id));
-      expect(user).toMatchObject({ karma: KARMA.START + KARMA.HOST_LATE_CANCEL, lobbyCreationBlocked: true });
+      expect(user).toMatchObject({
+        karma: KARMA.START + KARMA.HOST_LATE_CANCEL,
+        lobbyCreationBlocked: true,
+        creationBlockedReason: 'late_cancel',
+        creationBlockedLobbyId: lobby.id,
+      });
+      expect(user!.creationBlockedAt).toBeInstanceOf(Date);
       expect((await karmaEventsOf(t.db, host.user.id)).map((e) => e.reason)).toEqual(['host_late_cancel']);
       expect(await creationReason(host.token)).toBe('blocked');
 

@@ -46,6 +46,31 @@ export const NEWBIE_LOBBIES_PER_DAY = 1;
 /** Independent reports that trigger a shadow ban pending review. */
 export const SHADOW_BAN_REPORTS = 3;
 
+/** Moderation (stage 4). A report's optional comment. */
+export const REPORT_COMMENT_MAX = 300;
+/** Reports one user may send in a rolling day. */
+export const REPORTS_PER_DAY_MAX = 10;
+/** Rolling window of REPORTS_PER_DAY_MAX. */
+export const REPORTS_WINDOW_HOURS = 24;
+/** A report counts toward the shadow ban only from an account at least this old. */
+export const REPORTER_MIN_ACCOUNT_AGE_HOURS = 24;
+/** Appeal text bounds, in visible characters. */
+export const APPEAL_TEXT_MIN = 20;
+export const APPEAL_TEXT_MAX = 1000;
+/** After a rejected appeal the next one is allowed this many days after the decision. */
+export const APPEAL_RETRY_DAYS = 7;
+/** A moderator's comment: the reason of a rejection, a note for the log. */
+export const MODERATION_COMMENT_MAX = 500;
+/** A manual karma change by a moderator, either way. */
+export const MODERATION_KARMA_DELTA_MAX = 50;
+/** Open cases per page of the queue; users per search answer. */
+export const MODERATION_PAGE_SIZE = 30;
+/** User search query bounds. */
+export const USER_SEARCH_MIN = 2;
+export const USER_SEARCH_MAX = 64;
+/** Latest moderation log entries on a user card. */
+export const MODERATION_HISTORY_LIMIT = 50;
+
 /** How many interest tags a user picks during onboarding. */
 export const INTERESTS_MIN = 3;
 export const INTERESTS_MAX = 5;
@@ -148,5 +173,9 @@ export const RATE_LIMITS = {
   attendanceWrite: { limit: 20, windowSeconds: 60 },
   /** Taps on the bot's inline buttons. */
   botCallback: { limit: 30, windowSeconds: 60 },
+  reportWrite: { limit: 10, windowSeconds: 60 },
+  appealWrite: { limit: 5, windowSeconds: 60 },
+  moderationRead: { limit: 120, windowSeconds: 60 },
+  moderationWrite: { limit: 60, windowSeconds: 60 },
 } as const;
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

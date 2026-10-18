@@ -12,6 +12,7 @@ import { HealthController } from './health/health.controller.js';
 import { InterestsModule } from './interests/interests.module.js';
 import { KarmaModule } from './karma/karma.module.js';
 import { LobbiesModule } from './lobbies/lobbies.module.js';
+import { ModerationModule } from './moderation/moderation.module.js';
 import { PlacesModule } from './places/places.module.js';
 import { RateLimitModule } from './rate-limit/rate-limit.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -31,6 +32,7 @@ export class AppModule {
         InterestsModule,
         KarmaModule,
         LobbiesModule,
+        ModerationModule,
         PlacesModule,
         BotHandlersModule,
       ],
