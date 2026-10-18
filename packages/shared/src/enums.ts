@@ -63,6 +63,9 @@ export const KARMA_REASONS = [
 ] as const;
 export type KarmaReason = (typeof KARMA_REASONS)[number];
 
+/** Karma events whose comment the user sees: a moderator wrote it for them. */
+export const COMMENTED_KARMA_REASONS: readonly KarmaReason[] = ['manual', 'moderation'];
+
 /** Statuses that take a lobby slot. */
 export const OCCUPYING_MEMBERSHIP_STATUSES = [
   'approved',

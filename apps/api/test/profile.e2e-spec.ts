@@ -54,8 +54,9 @@ describe.skipIf(!adminUrl)('profile e2e (requires TEST_DATABASE_URL)', () => {
           delta: KARMA.LATE_CANCEL,
           createdAt: new Date(base + 3600_000).toISOString(),
           lobby: { id: lobby.id, title: 'Падел 2×2' },
+          comment: null,
         },
-        { reason: 'manual', delta: -1, createdAt: new Date(base).toISOString(), lobby: null },
+        { reason: 'manual', delta: -1, createdAt: new Date(base).toISOString(), lobby: null, comment: null },
       ]);
 
       // The history and the karma on the profile agree.

@@ -1,7 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { desc, eq, sql } from 'drizzle-orm';
 import { karmaEvents, lobbies, users, type Database } from '@masl/db';
-import { KARMA, KARMA_EVENTS_LIMIT, type KarmaEventDto, type KarmaReason } from '@masl/shared';
+import {
+  COMMENTED_KARMA_REASONS,
+  KARMA,
+  KARMA_EVENTS_LIMIT,
+  type KarmaEventDto,
+  type KarmaReason,
+} from '@masl/shared';
 import { DB } from '../db/db.module.js';
 
 /** A transaction of the app database. */
@@ -66,6 +72,7 @@ export class KarmaService {
       .select({
         reason: karmaEvents.reason,
         delta: karmaEvents.delta,
+        comment: karmaEvents.comment,
         createdAt: karmaEvents.createdAt,
         lobbyId: lobbies.id,
         lobbyTitle: lobbies.title,
@@ -81,6 +88,7 @@ export class KarmaService {
       createdAt: row.createdAt.toISOString(),
       lobby:
         row.lobbyId !== null && row.lobbyTitle !== null ? { id: row.lobbyId, title: row.lobbyTitle } : null,
+      comment: COMMENTED_KARMA_REASONS.includes(row.reason) ? row.comment : null,
     }));
   }
 }

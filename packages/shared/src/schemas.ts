@@ -561,6 +561,8 @@ export const karmaEventDto = z.strictObject({
   delta: z.number().int(),
   createdAt: isoOut,
   lobby: z.strictObject({ id: z.uuid(), title: z.string() }).nullable(),
+  /** A moderator's words to the user; `manual` and `moderation` events only. */
+  comment: z.string().nullable(),
 });
 export type KarmaEventDto = z.infer<typeof karmaEventDto>;
 
