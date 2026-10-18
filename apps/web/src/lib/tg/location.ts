@@ -31,22 +31,30 @@ function readCoords(data: unknown): { lat: number; lng: number } | null {
     : null;
 }
 
-/** Telegram's LocationManager (Bot API 8.0); null when it can't be used on this client. */
-async function fromTelegram(): Promise<LocationResult | null> {
-  // The dev mock has no host to answer, so outside Telegram go straight to the browser.
-  if (!session.inTelegram || !mountLocationManager.isAvailable()) return null;
+/**
+ * Mounts Telegram's LocationManager (Bot API 8.0); false when it can't be used on this client.
+ * The dev mock has no host to answer, so outside Telegram the browser is used instead.
+ */
+async function mountTelegramManager(): Promise<boolean> {
+  if (!session.inTelegram || !mountLocationManager.isAvailable()) return false;
   try {
     if (!isLocationManagerMounted()) {
       await mountLocationManager({ timeout: TG_MOUNT_TIMEOUT_MS });
     }
   } catch {
-    return null;
+    return false;
   }
   if (!isLocationManagerAvailable()) {
     // Unsupported on this device: don't keep the state, so the next attempt checks again.
     unmountLocationManager();
-    return null;
+    return false;
   }
+  return true;
+}
+
+/** Telegram's LocationManager; null when it can't be used on this client. */
+async function fromTelegram(): Promise<LocationResult | null> {
+  if (!(await mountTelegramManager())) return null;
   try {
     const coords = readCoords(await requestLocation({ timeout: TG_REQUEST_TIMEOUT_MS }));
     if (coords) return { kind: 'ok', ...coords };
@@ -86,6 +94,17 @@ function fromBrowser(): Promise<LocationResult> {
  */
 export async function requestUserLocation(): Promise<LocationResult> {
   return (await fromTelegram()) ?? fromBrowser();
+}
+
+/** Whether the location can be read without asking: the viewer already allowed it. */
+export async function hasLocationAccess(): Promise<boolean> {
+  if (await mountTelegramManager()) return isLocationManagerAccessGranted();
+  try {
+    const status = await navigator.permissions?.query({ name: 'geolocation' });
+    return status?.state === 'granted';
+  } catch {
+    return false;
+  }
 }
 
 /** Opens Telegram's location settings for the bot. Call only from a tap. */
