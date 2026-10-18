@@ -107,6 +107,7 @@ describe.skipIf(!adminUrl)('lobby privacy e2e (requires TEST_DATABASE_URL)', () 
       isHost: false,
       membershipStatus: 'pending',
       applyBlock: null,
+      reported: false,
     });
     expect((await detailBody(roles.left.token, lobby.id)).viewer.applyBlock).toBe('left');
 

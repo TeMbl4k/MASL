@@ -389,7 +389,7 @@ describe('response schemas fail closed', () => {
     },
     distanceM: 2400,
     host: { firstName: 'Анна', photoUrl: null, karma: 50 },
-    viewer: { isHost: false, membershipStatus: null, applyBlock: null },
+    viewer: { isHost: false, membershipStatus: null, applyBlock: null, reported: false },
   };
   const detail = {
     ...card,

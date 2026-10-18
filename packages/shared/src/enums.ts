@@ -227,8 +227,11 @@ export const REPORT_REASON_LABELS: Readonly<Record<ReportReason, string>> = {
   other: 'Другое',
 };
 
-/** Why a report doesn't count toward the shadow ban; shown to moderators only. */
-export const REPORT_NOT_COUNTED = ['not_onboarded', 'shadow_banned', 'new_account', 'same_reporter'] as const;
+/**
+ * Why a report doesn't count toward the shadow ban, in check order; moderators only. Reporters
+ * are always onboarded (reporting requires it).
+ */
+export const REPORT_NOT_COUNTED = ['shadow_banned', 'new_account', 'same_reporter'] as const;
 export type ReportNotCounted = (typeof REPORT_NOT_COUNTED)[number];
 
 /** What a moderation case is about: reports on a host, a «Не состоялась» answer, an appeal. */

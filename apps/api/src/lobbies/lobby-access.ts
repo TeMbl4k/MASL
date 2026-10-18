@@ -4,6 +4,8 @@ export interface LobbyAccessInput {
   viewerId: string;
   hostId: string;
   hostShadowBanned: boolean;
+  /** The viewer reported this lobby (stage 4): hidden from them like a banned host's. */
+  viewerReported: boolean;
   membership: { status: MembershipStatus; decidedAt: Date | null } | null;
   effectiveStatus: LobbyStatus;
 }
@@ -18,7 +20,7 @@ export interface LobbyAccessResult {
   canManage: boolean;
 }
 
-/** Memberships that keep a shadow-banned host's lobby visible to the member. */
+/** Memberships that keep a shadow-banned host's or a reported lobby visible to the member. */
 const KEEPS_VISIBLE: readonly MembershipStatus[] = ['pending', 'approved', 'attended', 'no_show'];
 const SEES_MEMBERS: readonly MembershipStatus[] = ['approved', 'attended'];
 const EXACT_PLACE_STATUSES: readonly LobbyStatus[] = ['open', 'active'];
@@ -30,7 +32,8 @@ const EXACT_PLACE_STATUSES: readonly LobbyStatus[] = ['open', 'active'];
 export function resolveLobbyAccess(i: LobbyAccessInput): LobbyAccessResult {
   const isHost = i.viewerId === i.hostId;
   const status = i.membership?.status ?? null;
-  const visible = isHost || !i.hostShadowBanned || (status !== null && KEEPS_VISIBLE.includes(status));
+  const hidden = i.hostShadowBanned || i.viewerReported;
+  const visible = isHost || !hidden || (status !== null && KEEPS_VISIBLE.includes(status));
   const canSeeExactPlace =
     isHost || (status === 'approved' && EXACT_PLACE_STATUSES.includes(i.effectiveStatus));
   const canSeeMembers = isHost || (status !== null && SEES_MEMBERS.includes(status));

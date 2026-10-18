@@ -354,6 +354,8 @@ export const lobbyViewerDto = z.strictObject({
   membershipStatus: z.enum(MEMBERSHIP_STATUSES).nullable(),
   /** First failing apply check; null when apply is allowed or would be an idempotent repeat. */
   applyBlock: z.enum(APPLY_BLOCK_REASONS).nullable(),
+  /** The viewer reported this lobby. */
+  reported: z.boolean(),
 });
 export type LobbyViewerDto = z.infer<typeof lobbyViewerDto>;
 

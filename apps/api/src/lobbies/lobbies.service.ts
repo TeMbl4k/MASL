@@ -329,6 +329,7 @@ export class LobbiesService {
       viewerId,
       hostId: row.hostId,
       hostShadowBanned: row.hostShadowBanned,
+      viewerReported: row.viewerReported,
       membership: membershipOf(row),
       effectiveStatus,
     });

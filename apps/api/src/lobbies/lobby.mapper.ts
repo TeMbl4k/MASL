@@ -129,6 +129,7 @@ export function toLobbyCard(row: LobbyCardRow, viewer: ViewerContext, now: Date)
         slots: row.slots,
         approvedCount: row.approvedCount,
       }),
+      reported: row.viewerReported,
     },
   };
 }
