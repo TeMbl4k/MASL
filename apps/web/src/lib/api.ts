@@ -4,6 +4,7 @@ import {
   feedResponse,
   hostApplicationsResponse,
   karmaEventsResponse,
+  cancelLobbyResponse,
   lobbyDetailDto,
   mapResponse,
   meDto,
@@ -122,7 +123,7 @@ export const api = {
     ),
   cancelLobby: (token: string, id: string, input: CancelLobbyInput) =>
     parsed(
-      lobbyDetailDto,
+      cancelLobbyResponse,
       request(`${lobbyPath(id)}/cancel`, { method: 'POST', token, body: JSON.stringify(input) }),
     ),
   // Mutations without data still send `{}`: a tunnel or proxy may forward an empty body as chunked,

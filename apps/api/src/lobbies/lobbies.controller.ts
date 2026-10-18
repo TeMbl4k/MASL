@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import {
   cancelLobbyInput,
+  cancelLobbyResponse,
   chatPrepareInput,
   chatPrepareResponse,
   createLobbyInput,
@@ -13,6 +14,7 @@ import {
   mapQuery,
   mapResponse,
   type CancelLobbyInput,
+  type CancelLobbyResponse,
   type ChatPrepareInput,
   type ChatPrepareResponse,
   type CreateLobbyInput,
@@ -104,12 +106,12 @@ export class LobbiesController {
   @Post(':id/cancel')
   @HttpCode(200)
   @RateLimit('lobbyWrite')
-  @ResponseSchema(lobbyDetailDto)
+  @ResponseSchema(cancelLobbyResponse)
   cancel(
     @CurrentUserId() userId: string,
     @Param('id', new ZodValidationPipe(idParam)) id: string,
     @Body(new ZodValidationPipe(cancelLobbyInput)) body: CancelLobbyInput,
-  ): Promise<LobbyDetailDto> {
+  ): Promise<CancelLobbyResponse> {
     return this.lobbies.cancel(userId, id, body);
   }
 

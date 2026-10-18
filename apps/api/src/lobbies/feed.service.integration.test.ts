@@ -15,6 +15,7 @@ import { addKarmaEvent, adminUrl, CANARY_POINT, insertLobby, insertUser } from '
 import type { OutboxService } from '../bot/outbox.service.js';
 import type { Clock } from '../clock/clock.module.js';
 import type { Env } from '../config/env.js';
+import type { KarmaService } from '../karma/karma.service.js';
 import { FeedService } from './feed.service.js';
 import { LobbiesService } from './lobbies.service.js';
 import { effectiveStatusSql } from './lobby-queries.js';
@@ -37,8 +38,14 @@ describe.skipIf(!adminUrl)('FeedService (requires TEST_DATABASE_URL)', () => {
     testDb = await createTestDatabase(adminUrl!);
     handle = createDb(testDb.url, { max: 4 });
     await seedInterests(handle.db);
-    // The feed never cancels, so the outbox is not needed.
-    const lobbiesService = new LobbiesService(handle.db, clock, {} as Env, {} as OutboxService);
+    // The feed never cancels, so neither the outbox nor karma is needed.
+    const lobbiesService = new LobbiesService(
+      handle.db,
+      clock,
+      {} as Env,
+      {} as OutboxService,
+      {} as KarmaService,
+    );
     feeds = new FeedService(handle.db, clock, lobbiesService);
   });
 

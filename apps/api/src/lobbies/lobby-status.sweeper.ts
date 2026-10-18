@@ -5,12 +5,16 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, eq, gt, inArray, lte, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { lobbies, type Database } from '@masl/db';
+import { ATTENDANCE_CLOSE_HOURS_AFTER, HOUR_MS, QUORUM_CHECK_HOURS_BEFORE } from '@masl/shared';
+import { OutboxService, type OutboxMessage } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { formatRedacted, redactError } from '../errors/redacting-exception.filter.js';
+import type { DbTransaction } from '../karma/karma.service.js';
+import { approvedCountSql } from './lobby-queries.js';
 
 /** Next to MIGRATION_LOCK_ID (7_302_514) of packages/db. */
 const LOBBY_STATUS_LOCK_ID = 7_302_515;
@@ -21,10 +25,12 @@ export interface SweepResult {
   finished: string[];
 }
 
+const hoursFrom = (now: Date, hours: number) => new Date(now.getTime() + hours * HOUR_MS);
+
 /**
- * Persists the time-driven statuses (open → active → finished) by CLOCK. Every decision reads
- * the effective status anyway; this keeps the stored cache close and gives Stage 3 the ids of
- * lobbies that just started or finished. A stored cancelled is never touched.
+ * Persists the time-driven statuses (open → active → finished) by CLOCK, then runs the bot's
+ * scheduled steps (stage 3 §8). Every step marks the lobbies it handles in the same UPDATE, so
+ * each lobby is handled once, and queues its messages in the same transaction.
  */
 @Injectable()
 export class LobbyStatusSweeper implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -35,6 +41,7 @@ export class LobbyStatusSweeper implements OnApplicationBootstrap, OnApplication
     @Inject(DB) private readonly db: Database,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(ENV) private readonly env: Env,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -82,7 +89,78 @@ export class LobbyStatusSweeper implements OnApplicationBootstrap, OnApplication
         .set({ status: 'finished', updatedAt: now })
         .where(and(inArray(lobbies.status, ['open', 'active']), lte(lobbies.endsAt, now)))
         .returning({ id: lobbies.id });
+      await this.outbox.enqueue(tx, await this.scheduled(tx, now), now);
       return { started: started.map((r) => r.id), finished: finished.map((r) => r.id) };
     });
+  }
+
+  /** The bot's scheduled steps; returns the messages they queue. */
+  private async scheduled(tx: DbTransaction, now: Date): Promise<OutboxMessage[]> {
+    const messages: OutboxMessage[] = [];
+    const activeChat = (row: { chatId: number | null; chatClosedAt: Date | null }) =>
+      row.chatId !== null && row.chatClosedAt === null ? row.chatId : null;
+
+    // Quorum: an hour before the start the host of a lobby that isn't full can lower the
+    // threshold or cancel without a penalty. Lobbies created later than that aren't asked.
+    const quorum = await tx
+      .update(lobbies)
+      .set({ quorumCheckedAt: now })
+      .where(
+        and(
+          eq(lobbies.status, 'open'),
+          isNull(lobbies.quorumCheckedAt),
+          gt(lobbies.startsAt, now),
+          lte(lobbies.startsAt, hoursFrom(now, QUORUM_CHECK_HOURS_BEFORE)),
+        ),
+      )
+      .returning({
+        id: lobbies.id,
+        hostId: lobbies.hostId,
+        createdAt: lobbies.createdAt,
+        startsAt: lobbies.startsAt,
+        slots: lobbies.slots,
+        approved: approvedCountSql,
+      });
+    for (const lobby of quorum) {
+      const askedInTime =
+        lobby.createdAt.getTime() <= lobby.startsAt.getTime() - QUORUM_CHECK_HOURS_BEFORE * HOUR_MS;
+      if (askedInTime && lobby.approved < lobby.slots) {
+        messages.push({ kind: 'host_quorum_check', userId: lobby.hostId, lobbyId: lobby.id });
+      }
+    }
+    // Started (or cancelled) before any pass saw it in the window: too late to ask.
+    await tx
+      .update(lobbies)
+      .set({ quorumCheckedAt: now })
+      .where(and(isNull(lobbies.quorumCheckedAt), lte(lobbies.startsAt, now)));
+
+    // The end: the group learns it, the invite link stops working.
+    const ended = await tx
+      .update(lobbies)
+      .set({ endedNotifiedAt: now })
+      .where(and(eq(lobbies.status, 'finished'), isNull(lobbies.endedNotifiedAt)))
+      .returning({ id: lobbies.id, chatId: lobbies.chatId, chatClosedAt: lobbies.chatClosedAt });
+    for (const lobby of ended) {
+      const chatId = activeChat(lobby);
+      if (chatId !== null) messages.push({ kind: 'group_finished', chatId, lobbyId: lobby.id });
+    }
+
+    // A cancelled lobby's group: the bot leaves when a finished one's would.
+    const leaving = await tx
+      .update(lobbies)
+      .set({ chatClosedAt: now })
+      .where(
+        and(
+          eq(lobbies.status, 'cancelled'),
+          isNotNull(lobbies.chatId),
+          isNull(lobbies.chatClosedAt),
+          lte(lobbies.cancelledAt, hoursFrom(now, -ATTENDANCE_CLOSE_HOURS_AFTER)),
+        ),
+      )
+      .returning({ id: lobbies.id, chatId: lobbies.chatId });
+    for (const lobby of leaving)
+      messages.push({ kind: 'group_leave', chatId: lobby.chatId!, lobbyId: lobby.id });
+
+    return messages;
   }
 }

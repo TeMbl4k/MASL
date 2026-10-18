@@ -1,4 +1,10 @@
-import type { CancelApplicationResponse, CancelLobbyInput, LobbyCardDto, LobbyDetailDto } from '@masl/shared';
+import type {
+  CancelApplicationResponse,
+  CancelLobbyInput,
+  CancelLobbyResponse,
+  LobbyCardDto,
+  LobbyDetailDto,
+} from '@masl/shared';
 import { SvelteMap } from 'svelte/reactivity';
 import { api, ApiError } from '../api.js';
 import { cardOf, detailMatchesCard } from '../lobby-card.js';
@@ -92,11 +98,13 @@ class LobbyCache {
     });
   }
 
-  cancelLobby(id: string, input: CancelLobbyInput): Promise<LobbyDetailDto> {
+  /** Cancels the host's lobby; a late cancel of a full lobby costs karma and blocks creation. */
+  cancelLobby(id: string, input: CancelLobbyInput): Promise<CancelLobbyResponse> {
     return this.#mutate(id, async () => {
-      const detail = await session.authorized((token) => api.cancelLobby(token, id, input));
-      this.#store(detail);
-      return detail;
+      const response = await session.authorized((token) => api.cancelLobby(token, id, input));
+      this.#store(response.lobby);
+      if (response.karmaDelta !== 0) void this.#refreshUser();
+      return response;
     });
   }
 

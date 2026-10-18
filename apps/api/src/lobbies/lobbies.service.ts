@@ -1,8 +1,9 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { and, eq, inArray } from 'drizzle-orm';
-import { lobbies, lobbyMembers, type Database, type GeoPoint } from '@masl/db';
+import { lobbies, lobbyMembers, users, type Database, type GeoPoint } from '@masl/db';
 import {
   HOSTED_UPCOMING_MAX,
+  KARMA,
   LOBBIES_PER_DAY_MAX,
   LOBBY_CREATE_WINDOW_HOURS,
   MINUTE_MS,
@@ -11,9 +12,12 @@ import {
   HOUR_MS,
   classifyMetroDistance,
   effectiveLobbyStatus,
+  isHostLateCancel,
+  lowerMinKarma,
   truncateToMinute,
   validateLobbyStart,
   type CancelLobbyInput,
+  type CancelLobbyResponse,
   type CreateBlockReason,
   type CreateLobbyInput,
   type CreationContextDto,
@@ -25,7 +29,7 @@ import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
-import type { DbTransaction } from '../karma/karma.service.js';
+import { KarmaService, type DbTransaction } from '../karma/karma.service.js';
 import { resolveLobbyAccess } from './lobby-access.js';
 import { toExactPlace, toLobbyDetail, toPerson, membershipOf, type DetailAccess } from './lobby.mapper.js';
 import {
@@ -101,6 +105,7 @@ export class LobbiesService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(ENV) private readonly env: Env,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(KarmaService) private readonly karma: KarmaService,
   ) {}
 
   async creationContext(userId: string): Promise<CreationContextDto> {
@@ -208,15 +213,19 @@ export class LobbiesService {
   }
 
   /**
-   * Host cancel, before the start only (spec §5.6). Memberships stay as they are (the Stage 3
-   * snapshot of who was in) and no karma moves. A repeat on a cancelled lobby is a 200.
+   * Host cancel, before the start only (spec §5.6). Memberships stay as they are. A cancel after
+   * hostLateCancelFrom with every slot taken costs KARMA.HOST_LATE_CANCEL and blocks lobby
+   * creation, whatever the stated reason (stage 3 §10). A repeat on a cancelled lobby is a 200.
    */
-  async cancel(viewerId: string, lobbyId: string, input: CancelLobbyInput): Promise<LobbyDetailDto> {
+  async cancel(viewerId: string, lobbyId: string, input: CancelLobbyInput): Promise<CancelLobbyResponse> {
     const now = this.clock.now();
     return this.db.transaction(async (tx) => {
+      // The host row first: the penalty changes it (lock order user → lobby → karma).
+      await this.lockActor(tx, viewerId);
       if (!(await lockLobby(tx, lobbyId))) throw apiError('lobby_not_found');
       const { row, rights, effectiveStatus } = await this.visibleLobby(tx, lobbyId, viewerId, now);
       if (!rights.isHost) throw apiError('not_host');
+      let karmaDelta = 0;
       if (row.status !== 'cancelled') {
         if (effectiveStatus !== 'open') throw apiError('lobby_started');
         await tx
@@ -229,10 +238,53 @@ export class LobbiesService {
             updatedAt: now,
           })
           .where(eq(lobbies.id, lobbyId));
+        if (isHostLateCancel(row, now)) {
+          const applied = await this.karma.apply(tx, {
+            userId: viewerId,
+            lobbyId,
+            reason: 'host_late_cancel',
+            delta: KARMA.HOST_LATE_CANCEL,
+            now,
+          });
+          if (applied) karmaDelta = KARMA.HOST_LATE_CANCEL;
+          await tx
+            .update(users)
+            .set({ lobbyCreationBlocked: true, updatedAt: now })
+            .where(eq(users.id, viewerId));
+        }
         await this.notifyCancelled(tx, lobbyId, now);
       }
-      return this.detailFor(tx, { lobbyId, viewerId, now });
+      return { lobby: await this.detailFor(tx, { lobbyId, viewerId, now }), karmaDelta };
     });
+  }
+
+  /**
+   * Quorum check: the karma threshold one preset step lower (none below the lowest preset),
+   * before the start only. Returns the new threshold.
+   */
+  async lowerMinKarma(viewerId: string, lobbyId: string): Promise<number | null> {
+    const now = this.clock.now();
+    return this.db.transaction(async (tx) => {
+      if (!(await lockLobby(tx, lobbyId))) throw apiError('lobby_not_found');
+      const { row, rights, effectiveStatus } = await this.visibleLobby(tx, lobbyId, viewerId, now);
+      if (!rights.isHost) throw apiError('not_host');
+      if (effectiveStatus === 'cancelled') throw apiError('lobby_cancelled');
+      if (effectiveStatus !== 'open') throw apiError('lobby_started');
+      if (row.minKarma === null) return null;
+      const minKarma = lowerMinKarma(row.minKarma);
+      await tx.update(lobbies).set({ minKarma, updatedAt: now }).where(eq(lobbies.id, lobbyId));
+      return minKarma;
+    });
+  }
+
+  /** What the bot's cancel confirmation needs; the host's only. */
+  async cancelPreview(viewerId: string, lobbyId: string): Promise<{ title: string; penalized: boolean }> {
+    const now = this.clock.now();
+    const { row, rights, effectiveStatus } = await this.visibleLobby(this.db, lobbyId, viewerId, now);
+    if (!rights.isHost) throw apiError('not_host');
+    if (effectiveStatus === 'cancelled') throw apiError('lobby_cancelled');
+    if (effectiveStatus !== 'open') throw apiError('lobby_started');
+    return { title: row.title, penalized: isHostLateCancel(row, now) };
   }
 
   /** Tells applicants and members, and the meetup group, that the lobby is off. */

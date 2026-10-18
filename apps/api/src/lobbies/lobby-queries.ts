@@ -1,5 +1,5 @@
 import { and, asc, count, eq, gt, inArray, isNotNull, isNull, ne, not, or, sql, type SQL } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { alias, type AnyPgColumn, type AnyPgTable } from 'drizzle-orm/pg-core';
 import {
   applicationEvents,
   distanceMeters,
@@ -79,15 +79,23 @@ export const publicLobbyColumns = {
   cancelComment: lobbies.cancelComment,
 } as const;
 
+/**
+ * An outer column inside a correlated subquery. Drizzle leaves columns unqualified in
+ * single-table queries, where `"id"` would resolve to the subquery's own table.
+ */
+function outer(table: AnyPgTable, column: AnyPgColumn) {
+  return sql`${table}.${sql.identifier(column.name)}`;
+}
+
 /** Members taking a slot (approved, attended, no_show). */
 export const approvedCountSql =
-  sql<number>`(select count(*) from ${lobbyMembers} where ${lobbyMembers.lobbyId} = ${lobbies.id} and ${inArray(lobbyMembers.status, [...OCCUPYING_MEMBERSHIP_STATUSES])})`.mapWith(
+  sql<number>`(select count(*) from ${lobbyMembers} where ${lobbyMembers.lobbyId} = ${outer(lobbies, lobbies.id)} and ${inArray(lobbyMembers.status, [...OCCUPYING_MEMBERSHIP_STATUSES])})`.mapWith(
     Number,
   );
 
 /** Pending applications the host sees: shadow-banned applicants are left out. */
 const pendingCountSql =
-  sql<number>`(select count(*) from ${lobbyMembers} inner join ${users} on ${users.id} = ${lobbyMembers.userId} where ${lobbyMembers.lobbyId} = ${lobbies.id} and ${lobbyMembers.status} = 'pending' and not ${users.isShadowBanned})`.mapWith(
+  sql<number>`(select count(*) from ${lobbyMembers} inner join ${users} on ${users.id} = ${lobbyMembers.userId} where ${lobbyMembers.lobbyId} = ${outer(lobbies, lobbies.id)} and ${lobbyMembers.status} = 'pending' and not ${users.isShadowBanned})`.mapWith(
     Number,
   );
 
@@ -587,7 +595,7 @@ export async function lockApplication(tx: DbTransaction, lobbyId: string, applic
 }
 
 export const attendedCountSql =
-  sql<number>`(select count(*) from ${karmaEvents} where ${karmaEvents.userId} = ${users.id} and ${karmaEvents.reason} = 'attended')`.mapWith(
+  sql<number>`(select count(*) from ${karmaEvents} where ${karmaEvents.userId} = ${outer(users, users.id)} and ${karmaEvents.reason} = 'attended')`.mapWith(
     Number,
   );
 

@@ -14,7 +14,6 @@ import {
 } from '@masl/db';
 import {
   NEWBIE_ATTENDED_MIN,
-  OCCUPYING_MEMBERSHIP_STATUSES,
   attendanceDeadline,
   attendanceState,
   effectiveLobbyStatus,
@@ -26,7 +25,12 @@ import {
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { DB } from '../db/db.module.js';
 import { parseCancelReason } from '../lobbies/lobby.mapper.js';
-import { attendedCountSql, type Executor, visibleToHostSql } from '../lobbies/lobby-queries.js';
+import {
+  approvedCountSql,
+  attendedCountSql,
+  type Executor,
+  visibleToHostSql,
+} from '../lobbies/lobby-queries.js';
 import { AppLinks, appPaths } from './app-links.js';
 import { encodeCallback } from './callbacks.js';
 import { texts } from './messages.js';
@@ -60,10 +64,7 @@ const lobbyColumns = {
   chatClosedAt: lobbies.chatClosedAt,
   attendanceSavedAt: lobbies.attendanceSavedAt,
   attendanceClosedAt: lobbies.attendanceClosedAt,
-  approvedCount:
-    sql<number>`(select count(*) from ${lobbyMembers} where ${lobbyMembers.lobbyId} = ${lobbies.id} and ${inArray(lobbyMembers.status, [...OCCUPYING_MEMBERSHIP_STATUSES])})`.mapWith(
-      Number,
-    ),
+  approvedCount: approvedCountSql,
 };
 
 type LobbyRow = Awaited<ReturnType<typeof loadLobby>>;
