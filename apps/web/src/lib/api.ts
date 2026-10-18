@@ -125,24 +125,26 @@ export const api = {
       lobbyDetailDto,
       request(`${lobbyPath(id)}/cancel`, { method: 'POST', token, body: JSON.stringify(input) }),
     ),
+  // Mutations without data still send `{}`: a tunnel or proxy may forward an empty body as chunked,
+  // and Fastify answers 415 to a body with no Content-Type.
   apply: (token: string, id: string) =>
     parsed(lobbyDetailDto, request(`${lobbyPath(id)}/applications`, { method: 'POST', token, body: '{}' })),
   cancelApplication: (token: string, id: string) =>
     parsed(
       cancelApplicationResponse,
-      request(`${lobbyPath(id)}/applications/me`, { method: 'DELETE', token }),
+      request(`${lobbyPath(id)}/applications/me`, { method: 'DELETE', token, body: '{}' }),
     ),
   applications: (token: string, id: string, signal?: AbortSignal) =>
     parsed(hostApplicationsResponse, request(`${lobbyPath(id)}/applications`, { token, signal })),
   approve: (token: string, id: string, applicationId: string) =>
     parsed(
       hostApplicationsResponse,
-      request(`${applicationPath(id, applicationId)}/approve`, { method: 'POST', token }),
+      request(`${applicationPath(id, applicationId)}/approve`, { method: 'POST', token, body: '{}' }),
     ),
   reject: (token: string, id: string, applicationId: string) =>
     parsed(
       hostApplicationsResponse,
-      request(`${applicationPath(id, applicationId)}/reject`, { method: 'POST', token }),
+      request(`${applicationPath(id, applicationId)}/reject`, { method: 'POST', token, body: '{}' }),
     ),
   myLobbies: (token: string) => parsed(myLobbiesResponse, request('/me/lobbies', { token })),
   karmaEvents: (token: string) => parsed(karmaEventsResponse, request('/me/karma-events', { token })),

@@ -54,7 +54,12 @@ describe.skipIf(!adminUrl)('lobby applications e2e (requires TEST_DATABASE_URL)'
       payload,
     });
   const cancelOwn = (token: string, id: string) =>
-    t.app.inject({ method: 'DELETE', url: `/api/lobbies/${id}/applications/me`, headers: authHeader(token) });
+    t.app.inject({
+      method: 'DELETE',
+      url: `/api/lobbies/${id}/applications/me`,
+      headers: authHeader(token),
+      payload: {},
+    });
   const list = (token: string, id: string) =>
     t.app.inject({ method: 'GET', url: `/api/lobbies/${id}/applications`, headers: authHeader(token) });
   const decide = (token: string, id: string, applicationId: string, decision: 'approve' | 'reject') =>
@@ -62,6 +67,8 @@ describe.skipIf(!adminUrl)('lobby applications e2e (requires TEST_DATABASE_URL)'
       method: 'POST',
       url: `/api/lobbies/${id}/applications/${applicationId}/${decision}`,
       headers: authHeader(token),
+      // The Mini App sends an empty JSON object, as with every mutation without data.
+      payload: {},
     });
   const detail = (token: string, id: string) =>
     t.app.inject({ method: 'GET', url: `/api/lobbies/${id}`, headers: authHeader(token) });

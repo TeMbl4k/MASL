@@ -26,6 +26,7 @@
 - **В логах нельзя писать текст, параметры и `cause.detail` ошибок базы:** `DrizzleQueryError` кладёт параметры запроса (адрес, EWKT) в `message`, а `detail` у 23514 содержит всю строку. Пишите только класс, `pgCode`, `constraint` и шаблон маршрута (`request.routeOptions.url`, не `request.url` — там координаты зрителя), как `RedactingExceptionFilter`.
 - **У `DrizzleQueryError` `name` равен `'Error'`:** полезное имя — только `error.constructor.name`.
 - **Без глобального фильтра Nest логирует ошибку целиком:** если из `app.module.ts` пропадёт `APP_FILTER`, `BaseExceptionFilter` напишет SQL и параметры. Это ловит `apps/api/test/errors.e2e-spec.ts` на настоящем маршруте — его нельзя удалять или ослаблять.
+- **POST без тела через туннель или прокси даёт 415.** cloudflared пересылает пустое тело как `Transfer-Encoding: chunked` без `Content-Type`, и Fastify отвечает «Unsupported Media Type» ещё до проверки входа (так ломалось «Одобрить» и «Отклонить»). Все изменяющие запросы без данных шлют `{}` с `application/json` (`apps/web/src/lib/api.ts`).
 - **Ошибки клиента Fastify (битый JSON, 413, 415) приходят в фильтр уже как `HttpException`**, с английским текстом и без `code`. Ветка «ошибка Fastify» в фильтре не срабатывала бы никогда, поэтому её нет.
 - **Хранимый статус встречи отстаёт от фактического** на интервал службы статусов (до 60 с). Любое решение берите по времени: `effectiveLobbyStatus()` или `effectiveStatusSql(now)`.
 - **vitest fake timers не управляют `AbortSignal.timeout`:** таймаут DaData сделан через `AbortController` и `setTimeout`.

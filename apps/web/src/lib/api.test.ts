@@ -41,3 +41,35 @@ describe('api places', () => {
     expect(JSON.parse(String(reverseInit.body))).toEqual(PIN);
   });
 });
+
+describe('api requests without data', () => {
+  const fetchMock = vi.fn(
+    async (_url: string, _init: RequestInit) =>
+      new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+  );
+
+  beforeEach(() => {
+    fetchMock.mockClear();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // A tunnel or proxy can forward a bodyless POST as an empty chunked body, which Fastify rejects
+  // with 415; an empty JSON object always parses.
+  it('send an empty JSON body on approve, reject and cancel', async () => {
+    await Promise.allSettled([
+      api.approve('token', 'lobby', 'application'),
+      api.reject('token', 'lobby', 'application'),
+      api.cancelApplication('token', 'lobby'),
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.body).toBe('{}');
+      expect(new Headers(init.headers).get('Content-Type')).toBe('application/json');
+    }
+  });
+});
