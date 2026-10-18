@@ -11,13 +11,16 @@ import {
   type ReportNotCounted,
   type ReportResponse,
 } from '@masl/shared';
+import { OutboxService } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
+import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
 import type { DbTransaction } from '../karma/karma.service.js';
 import { LobbiesService } from '../lobbies/lobbies.service.js';
 import { lockUser } from '../lobbies/lobby-queries.js';
 import { logModeration } from './moderation-log.js';
+import { notifyModerators } from './notify.js';
 
 /** What decides whether a report counts toward the shadow ban. */
 export interface ReporterFacts {
@@ -47,6 +50,8 @@ export class ReportsService {
     @Inject(DB) private readonly db: Database,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(LobbiesService) private readonly lobbies: LobbiesService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   /**
@@ -153,6 +158,7 @@ export class ReportsService {
     if (banned.length === 0) return;
     await tx.update(moderationCases).set({ shadowBannedAt: now }).where(eq(moderationCases.id, kase.id));
     await logModeration(tx, [{ actorId: null, subjectId, action: 'auto_shadow_ban', caseId: kase.id }], now);
+    await notifyModerators(tx, this.outbox, this.env.ADMIN_TELEGRAM_IDS, { id: kase.id, subjectId }, now);
   }
 
   private async lockUsers(tx: DbTransaction, ids: string[]): Promise<void> {

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BotModule } from '../bot/bot.module.js';
 import { KarmaModule } from '../karma/karma.module.js';
 import { LobbiesModule } from '../lobbies/lobbies.module.js';
 import { SessionModule } from '../session/session.module.js';
@@ -14,7 +15,7 @@ import { ReportsService } from './reports.service.js';
 
 /** Reports, moderation cases, appeals and the moderators' tools (stage 4). */
 @Module({
-  imports: [SessionModule, LobbiesModule, KarmaModule],
+  imports: [SessionModule, LobbiesModule, KarmaModule, BotModule],
   controllers: [ReportsController, AppealsController, AdminController, AdminUsersController],
   providers: [ReportsService, AppealsService, ModerationService, AdminUsersService, ModeratorGuard],
 })

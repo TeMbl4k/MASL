@@ -25,6 +25,7 @@ import {
   type AdminReportDto,
   type ResolveCaseInput,
 } from '@masl/shared';
+import { OutboxService } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
@@ -66,6 +67,7 @@ export class ModerationService {
     @Inject(ENV) private readonly env: Env,
     @Inject(LobbiesService) private readonly lobbies: LobbiesService,
     @Inject(KarmaService) private readonly karma: KarmaService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   /** Open cases, MODERATION_PAGE_SIZE a page, with counts per kind whatever the filter. */
@@ -247,6 +249,10 @@ export class ModerationService {
           break;
         case 'appeal_rejected':
           break;
+      }
+      if (kase.kind === 'appeal') {
+        const kind = input.decision === 'appeal_approved' ? 'user_appeal_approved' : 'user_appeal_rejected';
+        await this.outbox.enqueue(tx, [{ kind, userId: subjectId, caseId }], now);
       }
       await tx
         .update(moderationCases)

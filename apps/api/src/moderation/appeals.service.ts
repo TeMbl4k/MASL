@@ -2,11 +2,15 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq } from 'drizzle-orm';
 import { moderationCases, users, type Database } from '@masl/db';
 import { appealRetryAt, type AppealInput, type AppealStateDto } from '@masl/shared';
+import { OutboxService } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
+import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
 import { lockUser, type Executor } from '../lobbies/lobby-queries.js';
 import { loadCreationBlock } from './admin-queries.js';
+import { notifyModerators } from './notify.js';
+import { openCase } from './open-case.js';
 
 /**
  * Appeals against a creation block (spec stage 4 §2.1): one open at a time, the next one
@@ -17,6 +21,8 @@ export class AppealsService {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async state(userId: string): Promise<AppealStateDto> {
@@ -36,13 +42,19 @@ export class AppealsService {
       if (latest && latest.resolvedAt === null) throw apiError('appeal_open');
       const retryAt = this.retryAt(latest, now);
       if (retryAt !== null) throw apiError('appeal_too_soon', { retryAt, now });
-      await tx.insert(moderationCases).values({
-        kind: 'appeal',
-        subjectId: userId,
-        lobbyId: user.lobbyId,
-        appealText: input.text,
-        openedAt: now,
-      });
+      const caseId = await openCase(
+        tx,
+        { kind: 'appeal', subjectId: userId, lobbyId: user.lobbyId, appealText: input.text },
+        now,
+      );
+      if (caseId === null) throw apiError('appeal_open');
+      await notifyModerators(
+        tx,
+        this.outbox,
+        this.env.ADMIN_TELEGRAM_IDS,
+        { id: caseId, subjectId: userId },
+        now,
+      );
       return this.stateFor(tx, userId, now);
     });
   }

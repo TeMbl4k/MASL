@@ -12,6 +12,8 @@ export const appPaths = {
   lobby: (lobbyId: string) => `/lobby/${lobbyId}`,
   applications: (lobbyId: string) => `/lobby/${lobbyId}/manage`,
   attendance: (lobbyId: string) => `/lobby/${lobbyId}/attendance`,
+  profile: () => '/profile',
+  adminCase: (caseId: string) => `/admin/case/${caseId}`,
 };
 
 /**

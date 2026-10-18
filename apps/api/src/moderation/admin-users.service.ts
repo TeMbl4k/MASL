@@ -12,6 +12,7 @@ import {
   type ModerationLogEntryDto,
   type UserActionInput,
 } from '@masl/shared';
+import { OutboxService } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
@@ -43,6 +44,7 @@ export class AdminUsersService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(ENV) private readonly env: Env,
     @Inject(KarmaService) private readonly karma: KarmaService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   /** By an exact Telegram id, or by the start of @username, first or last name. */
@@ -113,7 +115,7 @@ export class AdminUsersService {
         return true;
       case 'unblock_creation': {
         if (!(await unblockCreation(tx, userId, now))) return false;
-        await tx
+        const approved = await tx
           .update(moderationCases)
           .set({
             resolvedAt: now,
@@ -127,7 +129,13 @@ export class AdminUsersService {
               eq(moderationCases.subjectId, userId),
               isNull(moderationCases.resolvedAt),
             ),
-          );
+          )
+          .returning({ id: moderationCases.id });
+        await this.outbox.enqueue(
+          tx,
+          approved.map((c) => ({ kind: 'user_appeal_approved' as const, userId, caseId: c.id })),
+          now,
+        );
         return true;
       }
       case 'karma_change': {
