@@ -268,6 +268,35 @@ describe.skipIf(!adminUrl)('places e2e with a DaData key (requires TEST_DATABASE
     expect(response.json()).toEqual({ enabled: true, degraded: false, address: 'Ленинградский пр-кт, д 36' });
   });
 
+  it("one user's searches never warm another user's cache (no probing of exact places)", async () => {
+    const a = await t.loginOnboarded();
+    const b = await t.loginOnboarded();
+    const suggest = (token: string, q: string) =>
+      t.app.inject({
+        method: 'GET',
+        url: `/api/places/suggest?q=${encodeURIComponent(q)}`,
+        headers: authHeader(token),
+      });
+    const reverse = (token: string) =>
+      t.app.inject({
+        method: 'GET',
+        url: `/api/places/reverse?lat=${CANARY_POINT.lat}&lng=${CANARY_POINT.lng}`,
+        headers: authHeader(token),
+      });
+
+    expect((await suggest(a.token, 'Новая Башиловка 14')).statusCode).toBe(200);
+    expect((await reverse(a.token)).statusCode).toBe(200);
+    expect(upstream).toHaveBeenCalledTimes(2);
+    // The same user's retyping is still served from the cache.
+    await suggest(a.token, 'новая  башиловка 14');
+    await reverse(a.token);
+    expect(upstream).toHaveBeenCalledTimes(2);
+
+    await suggest(b.token, 'новая  башиловка 14');
+    await reverse(b.token);
+    expect(upstream).toHaveBeenCalledTimes(4);
+  });
+
   it('T-ABUSE-7 (places part): not onboarded → 403 before any upstream call', async () => {
     const user = await t.login();
     const response = await t.app.inject({

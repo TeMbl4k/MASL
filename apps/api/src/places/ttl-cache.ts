@@ -5,7 +5,7 @@ interface Entry<V> {
 
 /**
  * Bounded in-memory cache with a TTL. When full, the least recently used entry goes first
- * (a Map keeps insertion order, and a hit re-inserts its key). Holds no user identity.
+ * (a Map keeps insertion order, and a hit re-inserts its key).
  */
 export class TtlCache<V> {
   readonly #entries = new Map<string, Entry<V>>();

@@ -18,13 +18,13 @@ export class PlacesService {
 
   async suggest(userId: string, query: string): Promise<PlaceSuggestResponse> {
     await this.users.requireOnboarded(userId);
-    const result = await this.dadata.suggest(query);
+    const result = await this.dadata.suggest(userId, query);
     return { ...flags(result), items: result.status === 'ok' ? result.value : [] };
   }
 
   async reverse(userId: string, point: GeoPointDto): Promise<PlaceReverseResponse> {
     await this.users.requireOnboarded(userId);
-    const result = await this.dadata.reverse(point);
+    const result = await this.dadata.reverse(userId, point);
     return { ...flags(result), address: result.status === 'ok' ? result.value : null };
   }
 }

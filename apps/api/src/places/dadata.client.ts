@@ -85,7 +85,8 @@ const roundCoord = (value: number) => Number(value.toFixed(REVERSE_COORD_DECIMAL
  * DaData address suggestions and reverse geocoding. Works only with DADATA_API_KEY; without it
  * every call answers `disabled` and nothing goes out. One request per call, no retries; a
  * TTL cache, a circuit breaker and a daily budget keep the free plan safe. Never logs the key,
- * the query, coordinates or upstream bodies.
+ * the query, coordinates or upstream bodies. Cache entries are per user: a shared cache would
+ * tell anyone, by `degraded` or by timing, what another user searched or where they dropped a pin.
  */
 @Injectable()
 export class DadataClient {
@@ -111,9 +112,9 @@ export class DadataClient {
   }
 
   /** Up to PLACE_SUGGESTIONS_MAX addresses in Moscow and the oblast, «г Москва, » stripped. */
-  async suggest(query: string): Promise<DadataResult<PlaceSuggestionDto[]>> {
+  async suggest(userId: string, query: string): Promise<DadataResult<PlaceSuggestionDto[]>> {
     if (!this.#apiKey) return DISABLED;
-    const cacheKey = foldForSearch(query);
+    const cacheKey = `${userId}:${foldForSearch(query)}`;
     const cached = this.#suggestCache.get(cacheKey, this.clock.now().getTime());
     if (cached !== undefined) return { status: 'ok', value: cached };
 
@@ -133,12 +134,12 @@ export class DadataClient {
   }
 
   /** The address at a point (within 100 m), or null when DaData knows none. */
-  async reverse(point: GeoPointDto): Promise<DadataResult<string | null>> {
+  async reverse(userId: string, point: GeoPointDto): Promise<DadataResult<string | null>> {
     if (!this.#apiKey) return DISABLED;
     // Rounded to about 10 m, so the request and the cache key are the same point.
     const lat = roundCoord(point.lat);
     const lon = roundCoord(point.lng);
-    const cacheKey = `${lat},${lon}`;
+    const cacheKey = `${userId}:${lat},${lon}`;
     const cached = this.#reverseCache.get(cacheKey, this.clock.now().getTime());
     if (cached !== undefined) return { status: 'ok', value: cached };
 
