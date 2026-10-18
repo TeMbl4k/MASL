@@ -60,6 +60,17 @@
     var(--color-ink);
 }
 
+/*
+ * A gradient screen reaches under the top inset (status bar and Telegram's buttons), so the
+ * gradient continues there instead of a black band. The content still starts below the inset.
+ */
+.bg-brand-glow.min-h-app {
+  margin-top: calc(-1 * var(--safe-top));
+  border-top: var(--safe-top) solid transparent;
+  background-origin: border-box;
+  min-height: 100dvh;
+}
+
 /* Featured lobby card: darkened brand gradient, so small paper text keeps a 4.5:1 contrast. */
 .bg-brand-card {
   background: linear-gradient(
