@@ -42,8 +42,8 @@ describe.skipIf(!adminUrl)('KarmaService.apply (requires TEST_DATABASE_URL)', ()
       now,
     };
 
-    expect(await handle.db.transaction((tx) => karma.apply(tx, change))).toBe(true);
-    expect(await handle.db.transaction((tx) => karma.apply(tx, change))).toBe(false);
+    expect(await handle.db.transaction((tx) => karma.apply(tx, change))).toBe(KARMA.LATE_CANCEL);
+    expect(await handle.db.transaction((tx) => karma.apply(tx, change))).toBeNull();
 
     const events = await karmaEventsOf(handle.db, user.id);
     expect(events).toHaveLength(1);
@@ -68,7 +68,7 @@ describe.skipIf(!adminUrl)('KarmaService.apply (requires TEST_DATABASE_URL)', ()
     const results = await Promise.all(
       [1, 2, 3].map(() => handle.db.transaction((tx) => karma.apply(tx, change))),
     );
-    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(results.filter((r) => r !== null)).toHaveLength(1);
     expect(await karmaEventsOf(handle.db, user.id)).toHaveLength(1);
     expect((await karmaOf(user.id)).karma).toBe(KARMA.START + KARMA.LATE_CANCEL);
   });
@@ -102,6 +102,35 @@ describe.skipIf(!adminUrl)('KarmaService.apply (requires TEST_DATABASE_URL)', ()
     }
     expect(await karmaEventsOf(handle.db, user.id)).toHaveLength(2);
     expect((await karmaOf(user.id)).karma).toBe(KARMA.START - 2);
+  });
+
+  it(`stops a gain at ${KARMA.MAX} and stores what was applied`, async () => {
+    const host = await insertUser(handle.db);
+    const user = await insertUser(handle.db);
+    await handle.db
+      .update(users)
+      .set({ karma: KARMA.MAX - 3 })
+      .where(eq(users.id, user.id));
+    const [first, second] = [
+      await insertLobby(handle.db, { hostId: host.id }),
+      await insertLobby(handle.db, { hostId: host.id }),
+    ];
+    const attended = (lobbyId: string) =>
+      handle.db.transaction((tx) =>
+        karma.apply(tx, { userId: user.id, lobbyId, reason: 'attended', delta: KARMA.ATTENDED, now }),
+      );
+    expect(await attended(first.id)).toBe(3);
+    expect(await attended(second.id)).toBe(0);
+    expect((await karmaOf(user.id)).karma).toBe(KARMA.MAX);
+    expect((await karmaEventsOf(handle.db, user.id)).map((e) => e.delta).sort()).toEqual([0, 3]);
+
+    // A loss is never clamped.
+    expect(
+      await handle.db.transaction((tx) =>
+        karma.apply(tx, { userId: user.id, lobbyId: first.id, reason: 'no_show', delta: KARMA.NO_SHOW, now }),
+      ),
+    ).toBe(KARMA.NO_SHOW);
+    expect((await karmaOf(user.id)).karma).toBe(KARMA.MAX + KARMA.NO_SHOW);
   });
 
   it("rolls back with the caller's transaction", async () => {

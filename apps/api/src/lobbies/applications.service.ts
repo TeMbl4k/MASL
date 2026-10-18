@@ -167,7 +167,7 @@ export class ApplicationsService {
           delta: KARMA.LATE_CANCEL,
           now,
         });
-        if (applied) karmaDelta = KARMA.LATE_CANCEL;
+        if (applied !== null) karmaDelta = applied;
       }
       return { lobby: await detail(), karmaDelta };
     });

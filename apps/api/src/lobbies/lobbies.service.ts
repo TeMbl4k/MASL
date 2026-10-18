@@ -246,7 +246,7 @@ export class LobbiesService {
             delta: KARMA.HOST_LATE_CANCEL,
             now,
           });
-          if (applied) karmaDelta = KARMA.HOST_LATE_CANCEL;
+          if (applied !== null) karmaDelta = applied;
           await tx
             .update(users)
             .set({ lobbyCreationBlocked: true, updatedAt: now })
