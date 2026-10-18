@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { lobbies, lobbyFeedback, lobbyMembers, notifications, users } from '@masl/db';
+import { lobbies, lobbyFeedback, lobbyMembers, moderationCases, notifications, users } from '@masl/db';
 import {
   KARMA,
   attendanceResponse,
@@ -393,6 +393,22 @@ describe.skipIf(!adminUrl)('check-in, attendance and feedback e2e (requires TEST
       const [edit] = t.telegram.sent('editMessageText');
       expect(edit!.payload.text).toBe('Как прошла встреча?\n\nСпасибо!');
       expect(edit!.payload.reply_markup).toBeUndefined();
+    });
+
+    it('«Не состоялась» opens one moderation case per lobby; later answers join it', async () => {
+      const { host, lobby, members } = await meetup({ startsInMin: -150 });
+      const [first, second, happy] = members;
+      await tap(happy!.user.telegramId, `f:good:${lobby.id}`);
+      const casesOf = () => t.db.select().from(moderationCases).where(eq(moderationCases.lobbyId, lobby.id));
+      expect(await casesOf()).toEqual([]);
+
+      await Promise.all([
+        tap(first!.user.telegramId, `f:not_held:${lobby.id}`),
+        tap(second!.user.telegramId, `f:not_held:${lobby.id}`),
+      ]);
+      expect(await casesOf()).toEqual([
+        expect.objectContaining({ kind: 'not_held', subjectId: host.user.id, resolvedAt: null }),
+      ]);
     });
   });
 });
