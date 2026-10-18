@@ -145,7 +145,7 @@ export const MOSCOW_STATIONS: readonly MetroStation[] = [
   { id: '14-likhobory', name: 'Лихоборы', lineId: '14', lat: 55.8472, lng: 37.5511 },
   { id: '14-lokomotiv', name: 'Локомотив', lineId: '14', lat: 55.8039, lng: 37.7459 },
   { id: '14-luzhniki', name: 'Лужники', lineId: '14', lat: 55.721, lng: 37.5605 },
-  { id: '14-moskva-siti', name: 'Москва-Сити', lineId: '14', lat: 55.7476, lng: 37.532 },
+  { id: '14-moskva-siti', name: 'Деловой центр', lineId: '14', lat: 55.7476, lng: 37.532 },
   { id: '14-nizhegorodskaya', name: 'Нижегородская', lineId: '14', lat: 55.7321, lng: 37.7281 },
   { id: '14-novokhokhlovskaya', name: 'Новохохловская', lineId: '14', lat: 55.7243, lng: 37.7173 },
   { id: '14-okruzhnaya', name: 'Окружная', lineId: '14', lat: 55.8489, lng: 37.5711 },

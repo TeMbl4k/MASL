@@ -150,9 +150,13 @@ describe('metro functions', () => {
 describe('metro provenance', () => {
   it('gives every addition a source URL', () => {
     const [header, ...rows] = readFileSync(here('./sources/additions.csv'), 'utf8').trim().split('\n');
-    expect(header).toBe('line_id;name_ru;lat;lng;source_url');
+    expect(header).toBe('line_id;name_ru;lat;lng;source_url;id');
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) expect(row.split(';')[4]).toMatch(/^https:\/\/\S+$/);
+  });
+
+  it('keeps the id of a renamed station', () => {
+    expect(stationById('14-moskva-siti')?.station.name).toBe('Деловой центр');
   });
 
   it('documents both sources and their licence', () => {
