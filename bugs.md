@@ -28,6 +28,8 @@
 - **`@telegram-apps/init-data-node`: `parse()` требует поле `signature`** и не переводит ключи `user` в camelCase. Поэтому после `validate()` поля `user` разбираем сами.
 - **В логах нельзя писать текст, параметры и `cause.detail` ошибок базы:** `DrizzleQueryError` кладёт параметры запроса (адрес, EWKT) в `message`, а `detail` у 23514 содержит всю строку. Пишите только класс, `pgCode`, `constraint` и шаблон маршрута (`request.routeOptions.url`, не `request.url` — там координаты зрителя), как `RedactingExceptionFilter`.
 - **У `DrizzleQueryError` `name` равен `'Error'`:** полезное имя — только `error.constructor.name`.
+- **Жалоба от аккаунта моложе суток не учитывается**: в тестах теневого бана сдвигайте `users.created_at` жалобщиков назад (`reporter()` в `moderation-notify.e2e-spec.ts`). После бана встреча скрыта, и следующая жалоба на неё — 404, а не ошибка теста.
+- **Модераторы, оставшиеся от прошлых тестов в общей базе, тоже получают сообщения бота о делах:** тесты сообщений модераторам снимают `is_moderator` со всех в `beforeEach`.
 - **Без глобального фильтра Nest логирует ошибку целиком:** если из `app.module.ts` пропадёт `APP_FILTER`, `BaseExceptionFilter` напишет SQL и параметры. Это ловит `apps/api/test/errors.e2e-spec.ts` на настоящем маршруте — его нельзя удалять или ослаблять.
 - **POST без тела через туннель или прокси даёт 415.** cloudflared пересылает пустое тело как `Transfer-Encoding: chunked` без `Content-Type`, и Fastify отвечает «Unsupported Media Type» ещё до проверки входа (так ломалось «Одобрить» и «Отклонить»). Все изменяющие запросы без данных шлют `{}` с `application/json` (`apps/web/src/lib/api.ts`).
 - **Ошибки клиента Fastify (битый JSON, 413, 415) приходят в фильтр уже как `HttpException`**, с английским текстом и без `code`. Ветка «ошибка Fastify» в фильтре не срабатывала бы никогда, поэтому её нет.
@@ -48,6 +50,7 @@
 ### Веб
 
 - **SvelteKit 3: алиас `#lib`**, а не `$lib`; конфиг Kit лежит в `vite.config.ts`.
+- **Svelte 5: `{@const}` — только прямой потомок блока** (`{#if}`, `{#each}`, `{#snippet}`, компонента), не обычного элемента: внутри `<div>` это ошибка компиляции.
 - **`mockTelegramEnv` требует `signature` в initData**, иначе SDK падает в разработке.
 - **Под `mockTelegramEnv` нативные вызовы, ждущие ответа клиента, висят вечно** (`showPopup`, `requestLocation`, монтирования): `postEvent` без `onEvent` пустой. Перед такими вызовами проверяйте `session.inTelegram`, а не только `.isAvailable()`; асинхронные `mount*` — всегда с таймаутом.
 - **SvelteKit 3:** шаблоны параметров — в `src/params.ts` через `defineParams`; старый `src/params/<name>.ts` молча не подключается. `goto(url, { replaceState })` устарел — используйте `{ replace: true }`. `preloadCode` принимает id маршрута (`'/(tabs)/map'`), а не путь. `goto` не принимает `page.url` по типам — передавайте `page.url.href`.
@@ -80,6 +83,7 @@
 ### Сборка и деплой
 
 - **Прод-установка зависимостей с `--ignore-scripts`**: иначе запускается `prepare` веба (`svelte-kit sync`), которому нужны dev-зависимости.
+- **API и веб берут типы `@masl/shared` и `@masl/db` из собранного `dist`:** после правки схем или констант сначала `pnpm --filter @masl/shared build` (или `@masl/db`), иначе typecheck ругается на старые типы, которых в исходниках уже нет.
 - **TypeScript ~6.0**: не обновлять до 7, пока SvelteKit 3 и typescript-eslint его не поддерживают.
 - **Docker Hub из России бывает недоступен**: `deploy/install.sh` тогда подключает зеркала (`dockerhub.timeweb.cloud`, `mirror.gcr.io`). Пакеты Docker ставим из репозитория Ubuntu, `download.docker.com` тоже может не открываться.
 - **С российских серверов недоступен `api.telegram.org`** (с марта 2026). Сервер для бота — за рубежом или через релей.
