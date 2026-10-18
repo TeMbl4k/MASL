@@ -84,3 +84,5 @@
 - **Docker Hub из России бывает недоступен**: `deploy/install.sh` тогда подключает зеркала (`dockerhub.timeweb.cloud`, `mirror.gcr.io`). Пакеты Docker ставим из репозитория Ubuntu, `download.docker.com` тоже может не открываться.
 - **С российских серверов недоступен `api.telegram.org`** (с марта 2026). Сервер для бота — за рубежом или через релей.
 - **Временный туннель cloudflared меняет адрес** при каждом перезапуске: новый адрес нужно снова указать в @BotFather → Menu Button.
+- **`postEvent` из `@telegram-apps/sdk` бросает на незнакомом событии.** Он сверяет метод с таблицей версий (`supports`), а новых методов Telegram (например, `web_app_request_chat`) там нет. Такие события слать через `postEvent` из `@telegram-apps/bridge`, ответы слушать его `on`: незнакомые события он передаёт как есть.
+- **В полноэкранном режиме Telegram кнопки «Close» и меню лежат поверх приложения.** Верхний отступ — `--safe-top`, не `env(safe-area-inset-top)`: Telegram отдаёт свои отступы через переменные `--tg-viewport-*`, их привязывает `tg/index.ts`.
