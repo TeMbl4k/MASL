@@ -13,6 +13,7 @@ import {
   type Notification,
 } from '@masl/db';
 import {
+  FEEDBACK_MEMBERSHIP_STATUSES,
   NEWBIE_ATTENDED_MIN,
   attendanceDeadline,
   attendanceState,
@@ -422,7 +423,7 @@ export class OutboxRenderer {
   }
 }
 
-const FEEDBACK_STATUSES: readonly MembershipStatus[] = ['approved', 'attended', 'no_show'];
+const FEEDBACK_STATUSES: readonly MembershipStatus[] = FEEDBACK_MEMBERSHIP_STATUSES;
 
 /** Buttons of the quorum check; the threshold button only while there is a threshold. */
 export function quorumMarkup(lobby: {

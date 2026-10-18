@@ -7,11 +7,13 @@ import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { DB } from '../db/db.module.js';
 import { formatRedacted, redactError } from '../errors/redacting-exception.filter.js';
 import { ApiException } from '../errors/api-error.js';
+import { AttendanceService } from '../lobbies/attendance.service.js';
 import { ChatService, type LinkOutcome } from '../lobbies/chat.service.js';
+import { FeedbackService, type FeedbackOutcome } from '../lobbies/feedback.service.js';
 import { LobbiesService } from '../lobbies/lobbies.service.js';
 import { FixedWindowStore } from '../rate-limit/fixed-window.store.js';
 import { decodeCallback, encodeCallback, type BotCallback } from './callbacks.js';
-import { quorumMarkup } from './outbox.renderer.js';
+import { attendancePollMarkup, quorumMarkup } from './outbox.renderer.js';
 import { AppLinks, appPaths } from './app-links.js';
 import { BOT } from './bot.provider.js';
 import { texts } from './messages.js';
@@ -34,6 +36,8 @@ export class BotUpdates implements OnModuleInit {
     @Inject(AppLinks) private readonly links: AppLinks,
     @Inject(ChatService) private readonly chats: ChatService,
     @Inject(LobbiesService) private readonly lobbies: LobbiesService,
+    @Inject(AttendanceService) private readonly attendance: AttendanceService,
+    @Inject(FeedbackService) private readonly feedback: FeedbackService,
     @Inject(FixedWindowStore) private readonly limits: FixedWindowStore,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -160,8 +164,32 @@ export class BotUpdates implements OnModuleInit {
         await ctx.editMessageText(`${original}\n\n${texts.quorumKept}`);
         return;
       }
-      default:
-        await ctx.answerCallbackQuery({ text: texts.notActual });
+      case 'attendance_toggle': {
+        const poll = await this.attendance.toggleDraft(userId, callback.memberId);
+        await ctx.answerCallbackQuery(poll.changed ? undefined : { text: texts.attendanceCheckedIn });
+        if (poll.changed) {
+          const app = await this.links.button('Открыть список', appPaths.attendance(poll.lobbyId));
+          await ctx.editMessageReplyMarkup({
+            reply_markup: attendancePollMarkup(poll.lobbyId, poll.members, app),
+          });
+        }
+        return;
+      }
+      case 'attendance_save': {
+        const saved = await this.attendance.saveDrafts(userId, callback.lobbyId);
+        const absent = saved.members.filter((m) => m.status === 'no_show').length;
+        const summary = texts.attendanceSaved(saved.members.length - absent, absent);
+        await ctx.answerCallbackQuery({ text: summary });
+        await ctx.editMessageText(`${original}\n\n${summary}`);
+        return;
+      }
+      case 'feedback': {
+        const outcome = await this.feedback.record(userId, callback.lobbyId, callback.rating);
+        const answer = feedbackReply(outcome);
+        await ctx.answerCallbackQuery({ text: answer });
+        await ctx.editMessageText(`${original}\n\n${answer}`);
+        return;
+      }
     }
   }
 
@@ -169,6 +197,11 @@ export class BotUpdates implements OnModuleInit {
   private async setWriteAccess(telegramId: number, allowed: boolean): Promise<void> {
     await this.db.update(users).set({ allowsWriteToPm: allowed }).where(eq(users.telegramId, telegramId));
   }
+}
+
+function feedbackReply(outcome: FeedbackOutcome): string {
+  if (outcome === 'recorded') return texts.feedbackThanks;
+  return outcome === 'repeat' ? texts.feedbackAlready : texts.notActual;
 }
 
 function linkReply(outcome: LinkOutcome): string {

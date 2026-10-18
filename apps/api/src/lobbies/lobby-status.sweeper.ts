@@ -5,15 +5,23 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, eq, gt, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
-import { lobbies, type Database } from '@masl/db';
-import { ATTENDANCE_CLOSE_HOURS_AFTER, HOUR_MS, QUORUM_CHECK_HOURS_BEFORE } from '@masl/shared';
+import { and, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
+import { lobbies, lobbyMembers, type Database } from '@masl/db';
+import {
+  ATTENDANCE_CLOSE_HOURS_AFTER,
+  ATTENDANCE_POLL_HOURS_AFTER,
+  ATTENDANCE_REMINDER_HOURS_AFTER,
+  FEEDBACK_MEMBERSHIP_STATUSES,
+  HOUR_MS,
+  QUORUM_CHECK_HOURS_BEFORE,
+} from '@masl/shared';
 import { OutboxService, type OutboxMessage } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { formatRedacted, redactError } from '../errors/redacting-exception.filter.js';
 import type { DbTransaction } from '../karma/karma.service.js';
+import { AttendanceService } from './attendance.service.js';
 import { approvedCountSql } from './lobby-queries.js';
 
 /** Next to MIGRATION_LOCK_ID (7_302_514) of packages/db. */
@@ -26,6 +34,18 @@ export interface SweepResult {
 }
 
 const hoursFrom = (now: Date, hours: number) => new Date(now.getTime() + hours * HOUR_MS);
+
+/** What the attendance steps read back from the lobbies they mark. */
+const attendanceStep = {
+  id: lobbies.id,
+  hostId: lobbies.hostId,
+  savedAt: lobbies.attendanceSavedAt,
+  approved: approvedCountSql,
+};
+
+/** The host is asked only while there is someone to mark and nothing is saved yet. */
+const asksHost = (lobby: { savedAt: Date | null; approved: number }) =>
+  lobby.savedAt === null && lobby.approved > 0;
 
 /**
  * Persists the time-driven statuses (open → active → finished) by CLOCK, then runs the bot's
@@ -42,6 +62,7 @@ export class LobbyStatusSweeper implements OnApplicationBootstrap, OnApplication
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(ENV) private readonly env: Env,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(AttendanceService) private readonly attendance: AttendanceService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -145,16 +166,81 @@ export class LobbyStatusSweeper implements OnApplicationBootstrap, OnApplication
       if (chatId !== null) messages.push({ kind: 'group_finished', chatId, lobbyId: lobby.id });
     }
 
-    // A cancelled lobby's group: the bot leaves when a finished one's would.
+    // Attendance: the host's poll and the members' «Как прошла?», a reminder, then the close.
+    const polled = await tx
+      .update(lobbies)
+      .set({ attendanceRequestedAt: now })
+      .where(
+        and(
+          eq(lobbies.status, 'finished'),
+          isNull(lobbies.attendanceRequestedAt),
+          lte(lobbies.endsAt, hoursFrom(now, -ATTENDANCE_POLL_HOURS_AFTER)),
+        ),
+      )
+      .returning(attendanceStep);
+    for (const lobby of polled) {
+      if (asksHost(lobby))
+        messages.push({ kind: 'host_attendance_poll', userId: lobby.hostId, lobbyId: lobby.id });
+    }
+    if (polled.length > 0) {
+      const raters = await tx
+        .select({ id: lobbyMembers.id, userId: lobbyMembers.userId, lobbyId: lobbyMembers.lobbyId })
+        .from(lobbyMembers)
+        .where(
+          and(
+            inArray(
+              lobbyMembers.lobbyId,
+              polled.map((l) => l.id),
+            ),
+            inArray(lobbyMembers.status, [...FEEDBACK_MEMBERSHIP_STATUSES]),
+          ),
+        );
+      for (const rater of raters) {
+        messages.push({
+          kind: 'member_feedback_request',
+          userId: rater.userId,
+          lobbyId: rater.lobbyId,
+          memberId: rater.id,
+        });
+      }
+    }
+    const reminded = await tx
+      .update(lobbies)
+      .set({ attendanceRemindedAt: now })
+      .where(
+        and(
+          eq(lobbies.status, 'finished'),
+          isNotNull(lobbies.attendanceRequestedAt),
+          isNull(lobbies.attendanceRemindedAt),
+          lte(lobbies.endsAt, hoursFrom(now, -ATTENDANCE_REMINDER_HOURS_AFTER)),
+        ),
+      )
+      .returning(attendanceStep);
+    for (const lobby of reminded) {
+      if (asksHost(lobby)) {
+        messages.push({ kind: 'host_attendance_reminder', userId: lobby.hostId, lobbyId: lobby.id });
+      }
+    }
+    messages.push(...(await this.attendance.closeExpired(tx, now)));
+
+    // The bot leaves the group when attendance closes, or as long after a cancel.
     const leaving = await tx
       .update(lobbies)
       .set({ chatClosedAt: now })
       .where(
         and(
-          eq(lobbies.status, 'cancelled'),
           isNotNull(lobbies.chatId),
           isNull(lobbies.chatClosedAt),
-          lte(lobbies.cancelledAt, hoursFrom(now, -ATTENDANCE_CLOSE_HOURS_AFTER)),
+          or(
+            and(
+              eq(lobbies.status, 'cancelled'),
+              lte(lobbies.cancelledAt, hoursFrom(now, -ATTENDANCE_CLOSE_HOURS_AFTER)),
+            ),
+            and(
+              eq(lobbies.status, 'finished'),
+              lte(lobbies.endsAt, hoursFrom(now, -ATTENDANCE_CLOSE_HOURS_AFTER)),
+            ),
+          ),
         ),
       )
       .returning({ id: lobbies.id, chatId: lobbies.chatId });

@@ -557,6 +557,7 @@ export async function lockOwnMembership(tx: DbTransaction, lobbyId: string, user
       status: lobbyMembers.status,
       decidedAt: lobbyMembers.decidedAt,
       chatJoinedAt: lobbyMembers.chatJoinedAt,
+      checkedInAt: lobbyMembers.checkedInAt,
     })
     .from(lobbyMembers)
     .where(and(eq(lobbyMembers.lobbyId, lobbyId), eq(lobbyMembers.userId, userId)))

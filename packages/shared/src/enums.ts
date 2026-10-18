@@ -67,6 +67,12 @@ export const OCCUPYING_MEMBERSHIP_STATUSES = [
 ] as const satisfies readonly MembershipStatus[];
 export type OccupyingMembershipStatus = (typeof OCCUPYING_MEMBERSHIP_STATUSES)[number];
 
+/** Members who may rate a meetup: those who took part, by the host's marks so far. */
+export const FEEDBACK_MEMBERSHIP_STATUSES = [
+  'approved',
+  'attended',
+] as const satisfies readonly MembershipStatus[];
+
 /** Kind of a station in the metro dataset: metro line or the Moscow Central Circle. */
 export const METRO_KINDS = ['metro', 'mcc'] as const;
 export type MetroKind = (typeof METRO_KINDS)[number];
