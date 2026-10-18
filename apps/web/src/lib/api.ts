@@ -1,4 +1,10 @@
 import {
+  adminCancelLobbyResponse,
+  adminCaseDto,
+  adminCasesResponse,
+  adminUserCardDto,
+  adminUserSearchResponse,
+  appealStateDto,
   attendanceResponse,
   cancelApplicationResponse,
   chatPrepareResponse,
@@ -13,6 +19,8 @@ import {
   myLobbiesResponse,
   placeReverseResponse,
   placeSuggestResponse,
+  reportResponse,
+  type AdminCasesQuery,
   type AuthResponse,
   type CancelLobbyInput,
   type ChatPrepareInput,
@@ -24,6 +32,9 @@ import {
   type MapQuery,
   type MeDto,
   type OnboardingInput,
+  type ReportInput,
+  type ResolveCaseRequest,
+  type UserActionRequest,
 } from '@masl/shared';
 
 /**
@@ -100,6 +111,8 @@ function qs(params: Record<string, string | number | null | undefined>): string 
 }
 
 const lobbyPath = (id: string) => `/lobbies/${encodeURIComponent(id)}`;
+const casePath = (id: string) => `/admin/cases/${encodeURIComponent(id)}`;
+const adminUserPath = (id: string) => `/admin/users/${encodeURIComponent(id)}`;
 const applicationPath = (id: string, applicationId: string) =>
   `${lobbyPath(id)}/applications/${encodeURIComponent(applicationId)}`;
 
@@ -181,6 +194,40 @@ export const api = {
   karmaEvents: (token: string) => parsed(karmaEventsResponse, request('/me/karma-events', { token })),
   updateInterests: (token: string, interests: string[]) =>
     parsed(meDto, request('/me/interests', { method: 'PUT', token, body: JSON.stringify({ interests }) })),
+  report: (token: string, id: string, input: ReportInput) =>
+    parsed(
+      reportResponse,
+      request(`${lobbyPath(id)}/reports`, { method: 'POST', token, body: JSON.stringify(input) }),
+    ),
+  appeal: (token: string) => parsed(appealStateDto, request('/me/appeal', { token })),
+  submitAppeal: (token: string, text: string) =>
+    parsed(appealStateDto, request('/me/appeals', { method: 'POST', token, body: JSON.stringify({ text }) })),
+
+  // Moderation: moderators and admins only (the API checks the role on every call).
+  adminCases: (token: string, query: Partial<AdminCasesQuery>, signal?: AbortSignal) =>
+    parsed(adminCasesResponse, request(`/admin/cases${qs(query)}`, { token, signal })),
+  adminCase: (token: string, id: string, signal?: AbortSignal) =>
+    parsed(adminCaseDto, request(casePath(id), { token, signal })),
+  resolveCase: (token: string, id: string, input: ResolveCaseRequest) =>
+    parsed(
+      adminCaseDto,
+      request(`${casePath(id)}/resolve`, { method: 'POST', token, body: JSON.stringify(input) }),
+    ),
+  adminCancelLobby: (token: string, id: string, comment: string | null) =>
+    parsed(
+      adminCancelLobbyResponse,
+      request(`/admin${lobbyPath(id)}/cancel`, { method: 'POST', token, body: JSON.stringify({ comment }) }),
+    ),
+  adminUsers: (token: string, q: string, signal?: AbortSignal) =>
+    parsed(adminUserSearchResponse, request(`/admin/users${qs({ q })}`, { token, signal })),
+  adminUser: (token: string, id: string, signal?: AbortSignal) =>
+    parsed(adminUserCardDto, request(adminUserPath(id), { token, signal })),
+  userAction: (token: string, id: string, input: UserActionRequest) =>
+    parsed(
+      adminUserCardDto,
+      request(`${adminUserPath(id)}/actions`, { method: 'POST', token, body: JSON.stringify(input) }),
+    ),
+
   // POST: the typed address and the exact pin stay out of URLs and so out of access logs.
   placeSuggest: (token: string, q: string, signal?: AbortSignal) =>
     parsed(

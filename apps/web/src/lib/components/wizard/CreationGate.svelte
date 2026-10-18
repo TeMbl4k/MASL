@@ -20,10 +20,16 @@
   const LOBBY_FORMS_ACC: PluralForms = ['встречу', 'встречи', 'встреч'];
   const UPCOMING_FORMS: PluralForms = ['предстоящая встреча', 'предстоящие встречи', 'предстоящих встреч'];
 
+  const LINKS = {
+    my: { href: '/my?tab=hosting', text: 'К моим событиям' },
+    home: { href: '/', text: 'На главную' },
+    profile: { href: '/profile', text: 'Открыть профиль' },
+  } as const;
+
   const retry = $derived(context.retryAt ? formatRetryAfter(context.retryAt, clock.now) : null);
 
   /** Full-screen copy per reason (spec §9.7). */
-  const copy = $derived.by((): { title: string; text: string; link: 'my' | 'home' } => {
+  const copy = $derived.by((): { title: string; text: string; link: 'my' | 'home' | 'profile' } => {
     switch (context.reason) {
       case 'daily_limit':
         return context.isNewbie
@@ -49,7 +55,7 @@
         return {
           title: CREATION_BLOCKED_TITLES[context.blockKind ?? 'late_cancel'],
           text: `${CREATION_BLOCKED_APPEAL}.`,
-          link: 'home',
+          link: 'profile',
         };
       default:
         return { title: 'Сначала заполните профиль', text: 'Без него встречу не создать.', link: 'home' };
@@ -66,10 +72,10 @@
     </h1>
     <p class="text-gray-light">{copy.text}</p>
     <a
-      href={copy.link === 'my' ? '/my?tab=hosting' : '/'}
+      href={LINKS[copy.link].href}
       class="mt-2 flex min-h-12 items-center rounded-2xl bg-brand px-6 text-lg font-bold text-paper"
     >
-      {copy.link === 'my' ? 'К моим событиям' : 'На главную'}
+      {LINKS[copy.link].text}
     </a>
   </div>
 </main>
