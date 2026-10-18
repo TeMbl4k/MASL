@@ -624,3 +624,26 @@ export async function loadActiveChat(db: Executor, lobbyId: string): Promise<num
     .where(and(eq(lobbies.id, lobbyId), isNotNull(lobbies.chatId), isNull(lobbies.chatClosedAt)));
   return row?.chatId ?? null;
 }
+
+/**
+ * Role-dependent detail data: the group, attendance progress and the viewer's check-in. Read
+ * only for the host and members; the mapper decides what each of them gets.
+ */
+export async function loadDetailExtras(db: Executor, lobbyId: string, viewerId: string) {
+  const [row] = await db
+    .select({
+      chatId: lobbies.chatId,
+      chatTitle: lobbies.chatTitle,
+      chatInviteLink: lobbies.chatInviteLink,
+      chatClosedAt: lobbies.chatClosedAt,
+      attendanceSavedAt: lobbies.attendanceSavedAt,
+      attendanceClosedAt: lobbies.attendanceClosedAt,
+      checkedInAt: viewerMember.checkedInAt,
+    })
+    .from(lobbies)
+    .leftJoin(viewerMember, and(eq(viewerMember.lobbyId, lobbies.id), eq(viewerMember.userId, viewerId)))
+    .where(eq(lobbies.id, lobbyId));
+  return row ?? null;
+}
+
+export type DetailExtrasRow = NonNullable<Awaited<ReturnType<typeof loadDetailExtras>>>;

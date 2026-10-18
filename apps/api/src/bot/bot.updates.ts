@@ -4,6 +4,7 @@ import { BotError, GrammyError, HttpError, type Bot, type Context } from 'grammy
 import { users, type Database } from '@masl/db';
 import { DB } from '../db/db.module.js';
 import { formatRedacted, redactError } from '../errors/redacting-exception.filter.js';
+import { ChatService, type LinkOutcome } from '../lobbies/chat.service.js';
 import { AppLinks, appPaths } from './app-links.js';
 import { BOT } from './bot.provider.js';
 import { texts } from './messages.js';
@@ -24,6 +25,7 @@ export class BotUpdates implements OnModuleInit {
     @Inject(BOT) private readonly bot: Bot,
     @Inject(DB) private readonly db: Database,
     @Inject(AppLinks) private readonly links: AppLinks,
+    @Inject(ChatService) private readonly chats: ChatService,
   ) {}
 
   onModuleInit(): void {
@@ -51,10 +53,36 @@ export class BotUpdates implements OnModuleInit {
       const status = ctx.myChatMember.new_chat_member.status;
       return this.setWriteAccess(ctx.from.id, status === 'member');
     });
+
+    // The meetup group (spec stage 3 §7).
+    privateChats.on('message:chat_shared', async (ctx) => {
+      const shared = ctx.message.chat_shared;
+      const outcome = await this.chats.link(ctx.from.id, shared.request_id, shared.chat_id, shared.title);
+      await ctx.reply(linkReply(outcome), { reply_markup: { remove_keyboard: true } });
+    });
+    bot.on('chat_join_request', (ctx) =>
+      this.chats.decideJoin(ctx.chatJoinRequest.chat.id, ctx.chatJoinRequest.from.id),
+    );
+    const groups = bot.chatType(['group', 'supergroup']);
+    groups.on('my_chat_member', (ctx) => {
+      const member = ctx.myChatMember.new_chat_member;
+      return member.status === 'left' || member.status === 'kicked'
+        ? this.chats.botRemoved(ctx.chat.id)
+        : this.chats.rightsChanged(ctx.chat.id, member);
+    });
+    groups.on('message:migrate_to_chat_id', (ctx) =>
+      this.chats.migrated(ctx.chat.id, ctx.message.migrate_to_chat_id),
+    );
   }
 
   /** Whether the bot may write to the user privately (users.allows_write_to_pm). */
   private async setWriteAccess(telegramId: number, allowed: boolean): Promise<void> {
     await this.db.update(users).set({ allowsWriteToPm: allowed }).where(eq(users.telegramId, telegramId));
   }
+}
+
+function linkReply(outcome: LinkOutcome): string {
+  if (outcome.ok) return texts.chatLinked(outcome.title, outcome.hasPeople);
+  if (outcome.reason === 'rights') return texts.chatMissingRights(outcome.missing);
+  return outcome.reason === 'taken' ? texts.chatTaken : texts.chatRequestStale;
 }

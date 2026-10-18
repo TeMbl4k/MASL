@@ -1,6 +1,8 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import {
   cancelLobbyInput,
+  chatPrepareInput,
+  chatPrepareResponse,
   createLobbyInput,
   creationContextDto,
   feedQuery,
@@ -11,6 +13,8 @@ import {
   mapQuery,
   mapResponse,
   type CancelLobbyInput,
+  type ChatPrepareInput,
+  type ChatPrepareResponse,
   type CreateLobbyInput,
   type CreationContextDto,
   type FeedQuery,
@@ -26,6 +30,7 @@ import { ResponseSchema } from '../contracts/response-schema.decorator.js';
 import { RateLimit } from '../rate-limit/rate-limit.decorator.js';
 import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
 import { AuthGuard, CurrentUserId } from '../session/auth.guard.js';
+import { ChatService } from './chat.service.js';
 import { FeedService } from './feed.service.js';
 import { LobbiesService } from './lobbies.service.js';
 import { originOf } from './lobby-queries.js';
@@ -36,6 +41,7 @@ export class LobbiesController {
   constructor(
     @Inject(LobbiesService) private readonly lobbies: LobbiesService,
     @Inject(FeedService) private readonly feeds: FeedService,
+    @Inject(ChatService) private readonly chats: ChatService,
   ) {}
 
   /** «Для вас»: discoverable lobbies of all Moscow, ranked; keyset-paged by `cursor`. */
@@ -105,5 +111,18 @@ export class LobbiesController {
     @Body(new ZodValidationPipe(cancelLobbyInput)) body: CancelLobbyInput,
   ): Promise<LobbyDetailDto> {
     return this.lobbies.cancel(userId, id, body);
+  }
+
+  /** Host: a group picker button for «Создать чат встречи» (WebApp.requestChat or the bot's chat). */
+  @Post(':id/chat/prepare')
+  @HttpCode(200)
+  @RateLimit('lobbyWrite')
+  @ResponseSchema(chatPrepareResponse)
+  prepareChat(
+    @CurrentUserId() userId: string,
+    @Param('id', new ZodValidationPipe(idParam)) id: string,
+    @Body(new ZodValidationPipe(chatPrepareInput)) body: ChatPrepareInput,
+  ): Promise<ChatPrepareResponse> {
+    return this.chats.prepare(userId, id, body);
   }
 }

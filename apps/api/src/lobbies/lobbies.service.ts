@@ -31,6 +31,7 @@ import { toExactPlace, toLobbyDetail, toPerson, membershipOf, type DetailAccess 
 import {
   loadCreationCounters,
   loadActiveChat,
+  loadDetailExtras,
   loadExactPlace,
   loadLobbyForViewer,
   loadViewerContext,
@@ -305,7 +306,8 @@ export class LobbiesService {
       access = { access: rights.isHost ? 'host' : 'member', exactPlace: toExactPlace(exact) };
     }
     const members = rights.canSeeMembers ? (await membersQuery(db, lobbyId)).map(toPerson) : null;
-    return toLobbyDetail(row, viewer, now, access, members);
+    const extras = rights.canSeeMembers ? await loadDetailExtras(db, lobbyId, viewerId) : null;
+    return toLobbyDetail(row, viewer, now, access, members, extras);
   }
 
   /** Locks the actor's user row, the first lock of every user mutation (spec §8). */
