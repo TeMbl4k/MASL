@@ -1,6 +1,6 @@
 <script lang="ts">
   import { LOBBY_CATEGORY_INFO, type CreationContextDto } from '@masl/shared';
-  import { onMount, tick, untrack } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { api, ApiError } from '#lib/api.js';
   import BottomAction from '#lib/components/BottomAction.svelte';
@@ -176,12 +176,11 @@
     back.go();
   }
 
-  // Back walks the steps; on step 1 it asks before leaving a draft. addHandler reads and writes
-  // the handler list, so it runs untracked, or the effect would re-run itself.
+  // Back walks the steps; on step 1 it asks before leaving a draft.
   $effect(() => {
     if (phase !== 'steps' || published) return;
     if (draft.step === 1 && (!draft.dirty || leaving)) return;
-    return untrack(() => back.addHandler(() => void onBack()));
+    return back.addHandler(() => void onBack());
   });
 
   const primary = usePrimaryAction(() => ({

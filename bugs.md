@@ -2,7 +2,6 @@
 
 ## Открытые баги
 
-- **`useBackHandler()` в `apps/web/src/lib/tg/back.svelte.ts` зацикливается** (`effect_update_depth_exceeded`): внутри `$effect` он читает и пишет `$state` со списком обработчиков. Сейчас его никто не вызывает; мастер обходит это через `untrack(() => back.addHandler(...))`. Исправить: `$effect(() => untrack(() => back.addHandler(handler)))`, затем убрать обход в `routes/create/+page.svelte`.
 - **`origin.restore()` при втором одновременном вызове возвращается раньше**, чем станция восстановлена (флаг ставится сразу, модуль метро грузится асинхронно). Сейчас вызов один, ничего не ломается; если вызовов станет больше, хранить и возвращать общий промис.
 
 ## Грабли: не трогать без понимания
@@ -44,6 +43,8 @@
 - **`mockTelegramEnv` требует `signature` в initData**, иначе SDK падает в разработке.
 - **Под `mockTelegramEnv` нативные вызовы, ждущие ответа клиента, висят вечно** (`showPopup`, `requestLocation`, монтирования): `postEvent` без `onEvent` пустой. Перед такими вызовами проверяйте `session.inTelegram`, а не только `.isAvailable()`; асинхронные `mount*` — всегда с таймаутом.
 - **SvelteKit 3:** шаблоны параметров — в `src/params.ts` через `defineParams`; старый `src/params/<name>.ts` молча не подключается. `goto(url, { replaceState })` устарел — используйте `{ replace: true }`. `preloadCode` принимает id маршрута (`'/(tabs)/map'`), а не путь. `goto` не принимает `page.url` по типам — передавайте `page.url.href`.
+- **Тесты рун (`*.svelte.test.ts`) идут в проекте vitest `client`:** окружение `test/client-environment.ts` (`viteEnvironment: 'client'`), условие `browser` и `svelte` в `server.deps.inline`. Без любого из трёх модуль компилируется или грузится серверным, и `$effect` молча не выполняется — тест проходит или падает не по той причине.
+- **Функция, которую зовут из `$effect` и которая читает и пишет один `$state`, должна делать это в `untrack`** (так `back.addHandler`), иначе эффект зависит от того, что пишет, и зацикливается (`effect_update_depth_exceeded`).
 - **Svelte 5: в `$effect`/`$derived` сначала читайте сигнал, потом нереактивное условие.** `session.inTelegram && signal()` при первом запуске с `false` не подписывается на сигнал, и эффект больше не перезапустится (так кнопка «Назад» Telegram не появлялась).
 - **`requestLocation` из `@telegram-apps/sdk` 3.11.8 возвращает сырые поля в snake_case** (`latitude`, `longitude`, …). Отказ одни клиенты выдают исключением, другие — ответом без координат. После отказа SDK ставит `available: false` и не перепроверяет: после неудачи вызываем `unmountLocationManager()`. После перезагрузки страницы состояние берётся из `sessionStorage` SDK.
 - **Главная кнопка Telegram — один обработчик на всё приложение** (`usePrimaryAction`): `onMainButtonClick` в каждом экране копит обработчики.

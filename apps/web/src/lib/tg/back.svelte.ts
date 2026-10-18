@@ -1,7 +1,7 @@
 import { hideBackButton, isBackButtonMounted, onBackButtonClick, showBackButton } from '@telegram-apps/sdk';
 import { afterNavigate, goto } from '$app/navigation';
 import { page } from '$app/state';
-import { tick } from 'svelte';
+import { tick, untrack } from 'svelte';
 import { session } from '../session.svelte.js';
 import { depthBehind, historyIndexOf, isBackVisible, resolveBack } from './back-stack.js';
 import { haptic } from './haptics.js';
@@ -61,10 +61,18 @@ class BackController {
     this.#entryIndex = historyIndexOf(history.state);
   }
 
+  /**
+   * Registers a screen handler; the returned function removes it. Reads the list untracked, so
+   * an effect that calls this does not depend on the list it writes and re-run itself.
+   */
   addHandler(handler: () => void): () => void {
-    this.#handlers = [...this.#handlers, handler];
+    untrack(() => {
+      this.#handlers = [...this.#handlers, handler];
+    });
     return () => {
-      this.#handlers = this.#handlers.filter((h) => h !== handler);
+      untrack(() => {
+        this.#handlers = this.#handlers.filter((h) => h !== handler);
+      });
     };
   }
 }
