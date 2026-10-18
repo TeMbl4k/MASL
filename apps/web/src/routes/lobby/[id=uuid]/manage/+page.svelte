@@ -95,7 +95,7 @@
   <h2 class="text-[0.9375rem] font-semibold">{text}</h2>
 {/snippet}
 
-<main class="min-h-dvh pb-10">
+<main class="min-h-app pb-10">
   {#if failure}
     <PageHeader title={failure === 'not-host' ? 'Это не ваша встреча' : 'Встреча не найдена'} />
     <div class="px-5 pt-4">

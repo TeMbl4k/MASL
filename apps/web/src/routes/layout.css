@@ -18,6 +18,14 @@
 :root {
   /* The app is always dark, whatever the Telegram theme is. */
   color-scheme: dark;
+  /*
+   * Top inset in Telegram's fullscreen mode: the status bar plus Telegram's own Close and menu
+   * buttons drawn over the app. Zero in the usual mode; the vars are bound in tg/index.ts.
+   */
+  --safe-top: max(
+    env(safe-area-inset-top, 0px),
+    calc(var(--tg-viewport-safe-area-inset-top, 0px) + var(--tg-viewport-content-safe-area-inset-top, 0px))
+  );
   /* Bottom inset: the device safe area, or Telegram's when the viewport CSS vars are bound. */
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-viewport-safe-area-inset-bottom, 0px));
   /* Height of the tab bar without the safe area. */
@@ -31,9 +39,18 @@
     min-height: 100%;
   }
 
+  body {
+    padding-top: var(--safe-top);
+  }
+
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-brand;
   }
+}
+
+/* A full-height screen below the top inset. */
+@utility min-h-app {
+  min-height: calc(100dvh - var(--safe-top));
 }
 
 /* Brand gradient: black → red → orange → sand. */

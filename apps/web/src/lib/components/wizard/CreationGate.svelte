@@ -57,7 +57,7 @@
   });
 </script>
 
-<main class="bg-brand-glow flex min-h-dvh flex-col px-5 pt-5">
+<main class="bg-brand-glow flex min-h-app flex-col px-5 pt-5">
   <WizardBack />
   <div class="mx-auto flex max-w-sm flex-1 flex-col items-center justify-center gap-4 pb-24 text-center">
     <Alert size={36} class="text-brand" />

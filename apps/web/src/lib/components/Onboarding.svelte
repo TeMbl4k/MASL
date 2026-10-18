@@ -51,7 +51,7 @@
   }
 </script>
 
-<section class="bg-brand-glow flex min-h-dvh flex-col gap-8 px-5 pt-14 pb-28">
+<section class="bg-brand-glow flex min-h-app flex-col gap-8 px-5 pt-14 pb-28">
   <header class="space-y-2">
     <h1 class="text-4xl font-light tracking-tight">
       Привет, <span class="font-semibold italic">{user.firstName}</span>!

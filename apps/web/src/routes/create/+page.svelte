@@ -203,14 +203,14 @@
 </svelte:head>
 
 {#if phase === 'loading'}
-  <main class="bg-brand-glow flex min-h-dvh flex-col px-5 pt-5" aria-busy="true">
+  <main class="bg-brand-glow flex min-h-app flex-col px-5 pt-5" aria-busy="true">
     <WizardBack />
     <div class="flex flex-1 items-center justify-center pb-16">
       <p class="text-gray-light">Загружаем…</p>
     </div>
   </main>
 {:else if phase === 'error'}
-  <main class="flex min-h-dvh flex-col px-5 pt-5">
+  <main class="flex min-h-app flex-col px-5 pt-5">
     <WizardBack />
     <div class="flex flex-1 flex-col justify-center pb-16">
       <ErrorState
@@ -223,7 +223,7 @@
 {:else if phase === 'gate' && context}
   <CreationGate {context} />
 {:else if phase === 'restore'}
-  <main class="bg-brand-glow flex min-h-dvh flex-col px-5 pt-5 pb-16">
+  <main class="bg-brand-glow flex min-h-app flex-col px-5 pt-5 pb-16">
     <WizardBack />
     <section
       class="mx-auto my-auto flex w-full max-w-lg flex-col gap-4 rounded-3xl border border-gray-dark bg-ink/60 p-6"

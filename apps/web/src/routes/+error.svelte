@@ -6,7 +6,7 @@
   <title>{page.status === 404 ? 'Страница не найдена' : 'Ошибка'} — MASL</title>
 </svelte:head>
 
-<main class="bg-brand-glow flex min-h-dvh flex-col items-center justify-center gap-4 px-8 text-center">
+<main class="bg-brand-glow flex min-h-app flex-col items-center justify-center gap-4 px-8 text-center">
   <h1 tabindex="-1" class="text-2xl font-semibold outline-none">
     {page.status === 404 ? 'Страница не найдена' : 'Что-то пошло не так'}
   </h1>

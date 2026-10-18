@@ -41,7 +41,7 @@
   <title>Профиль — MASL</title>
 </svelte:head>
 
-<main class="min-h-dvh px-5 pt-7">
+<main class="min-h-app px-5 pt-7">
   {#if user}
     <div class="flex flex-col gap-5">
       <header class="flex items-center gap-4">

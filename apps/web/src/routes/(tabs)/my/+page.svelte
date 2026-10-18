@@ -98,7 +98,7 @@
   </li>
 {/snippet}
 
-<main class="bg-brand-glow min-h-dvh">
+<main class="bg-brand-glow min-h-app">
   <PageHeader title="Мои события">
     {#snippet heading()}Мои <span class="font-semibold italic">события</span>{/snippet}
   </PageHeader>

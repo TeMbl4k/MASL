@@ -297,7 +297,7 @@
   </div>
 {/snippet}
 
-<main class="bg-brand-glow min-h-dvh pb-8">
+<main class="bg-brand-glow min-h-app pb-8">
   {#if notFound}
     <PageHeader title="Встреча не найдена" />
     <div class="flex flex-col items-start gap-4 px-5 pt-4">

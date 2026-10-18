@@ -150,7 +150,7 @@
 {/snippet}
 
 {#if mapFailed}
-  <main class="min-h-dvh">
+  <main class="min-h-app">
     <header class="flex flex-col gap-4 px-5 pt-5">
       <h1 tabindex="-1" class="text-3xl font-light tracking-tight outline-none">Карта</h1>
       <p class="text-sm text-gray-light">Карта недоступна на этом устройстве — показываем списком</p>
@@ -188,7 +188,7 @@
 {:else}
   <!-- -mb-4 cancels the extra 1rem the tabs layout keeps under the tab bar, so the page doesn't scroll. -->
   <main
-    class="relative -mb-4 h-[calc(var(--tg-viewport-stable-height,100dvh)-var(--tab-bar-height)-var(--safe-bottom))] overflow-hidden"
+    class="relative -mb-4 h-[calc(var(--tg-viewport-stable-height,100dvh)-var(--safe-top)-var(--tab-bar-height)-var(--safe-bottom))] overflow-hidden"
   >
     <h1 class="sr-only" tabindex="-1">Карта встреч</h1>
     {#if LobbyMap}

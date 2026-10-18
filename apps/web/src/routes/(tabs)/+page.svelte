@@ -74,7 +74,7 @@
   </a>
 {/snippet}
 
-<main class="bg-brand-glow min-h-dvh">
+<main class="bg-brand-glow min-h-app">
   <header class="flex flex-col gap-4 px-5 pt-5">
     <div class="flex items-center gap-3">
       {#if user}
