@@ -544,7 +544,12 @@ export async function loadCreationCounters(
 /** Locks the user's own membership row in the lobby (after the user and lobby locks). */
 export async function lockOwnMembership(tx: DbTransaction, lobbyId: string, userId: string) {
   const [row] = await tx
-    .select({ id: lobbyMembers.id, status: lobbyMembers.status, decidedAt: lobbyMembers.decidedAt })
+    .select({
+      id: lobbyMembers.id,
+      status: lobbyMembers.status,
+      decidedAt: lobbyMembers.decidedAt,
+      chatJoinedAt: lobbyMembers.chatJoinedAt,
+    })
     .from(lobbyMembers)
     .where(and(eq(lobbyMembers.lobbyId, lobbyId), eq(lobbyMembers.userId, userId)))
     .for('no key update');
@@ -569,6 +574,7 @@ export async function lockApplication(tx: DbTransaction, lobbyId: string, applic
   const [row] = await tx
     .select({
       id: lobbyMembers.id,
+      userId: lobbyMembers.userId,
       status: lobbyMembers.status,
       applicantKarma: users.karma,
       visibleToHost: visibleToHostSql,
@@ -609,3 +615,12 @@ export function applicantsQuery(db: Executor, lobbyId: string) {
 }
 
 export type ApplicantRow = Awaited<ReturnType<typeof applicantsQuery>>[number];
+
+/** The meetup group the bot still serves for the lobby, or null. */
+export async function loadActiveChat(db: Executor, lobbyId: string): Promise<number | null> {
+  const [row] = await db
+    .select({ chatId: lobbies.chatId })
+    .from(lobbies)
+    .where(and(eq(lobbies.id, lobbyId), isNotNull(lobbies.chatId), isNull(lobbies.chatClosedAt)));
+  return row?.chatId ?? null;
+}

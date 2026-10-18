@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BotModule } from '../bot/bot.module.js';
 import { KarmaModule } from '../karma/karma.module.js';
 import { SessionModule } from '../session/session.module.js';
 import { ApplicationsController } from './applications.controller.js';
@@ -11,7 +12,7 @@ import { MeLobbiesController } from './me-lobbies.controller.js';
 
 /** Lobbies, applications, feed and map. */
 @Module({
-  imports: [SessionModule, KarmaModule],
+  imports: [SessionModule, KarmaModule, BotModule],
   controllers: [LobbiesController, ApplicationsController, MeLobbiesController],
   providers: [LobbiesService, ApplicationsService, FeedService, LobbyStatusSweeper],
   exports: [LobbiesService],

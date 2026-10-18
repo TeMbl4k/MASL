@@ -1,6 +1,6 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
-import { lobbies, type Database, type GeoPoint } from '@masl/db';
+import { and, eq, inArray } from 'drizzle-orm';
+import { lobbies, lobbyMembers, type Database, type GeoPoint } from '@masl/db';
 import {
   HOSTED_UPCOMING_MAX,
   LOBBIES_PER_DAY_MAX,
@@ -20,6 +20,7 @@ import {
   type LobbyDetailDto,
 } from '@masl/shared';
 import { nearestStation, placeHint } from '@masl/shared/metro';
+import { OutboxService } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
@@ -29,6 +30,7 @@ import { resolveLobbyAccess } from './lobby-access.js';
 import { toExactPlace, toLobbyDetail, toPerson, membershipOf, type DetailAccess } from './lobby.mapper.js';
 import {
   loadCreationCounters,
+  loadActiveChat,
   loadExactPlace,
   loadLobbyForViewer,
   loadViewerContext,
@@ -97,6 +99,7 @@ export class LobbiesService {
     @Inject(DB) private readonly db: Database,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(ENV) private readonly env: Env,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   async creationContext(userId: string): Promise<CreationContextDto> {
@@ -225,9 +228,32 @@ export class LobbiesService {
             updatedAt: now,
           })
           .where(eq(lobbies.id, lobbyId));
+        await this.notifyCancelled(tx, lobbyId, now);
       }
       return this.detailFor(tx, { lobbyId, viewerId, now });
     });
+  }
+
+  /** Tells applicants and members, and the meetup group, that the lobby is off. */
+  private async notifyCancelled(tx: DbTransaction, lobbyId: string, now: Date): Promise<void> {
+    const members = await tx
+      .select({ id: lobbyMembers.id, userId: lobbyMembers.userId })
+      .from(lobbyMembers)
+      .where(and(eq(lobbyMembers.lobbyId, lobbyId), inArray(lobbyMembers.status, ['pending', 'approved'])));
+    const chatId = await loadActiveChat(tx, lobbyId);
+    await this.outbox.enqueue(
+      tx,
+      [
+        ...members.map((m) => ({
+          kind: 'member_lobby_cancelled' as const,
+          userId: m.userId,
+          lobbyId,
+          memberId: m.id,
+        })),
+        ...(chatId === null ? [] : [{ kind: 'group_cancelled' as const, chatId, lobbyId }]),
+      ],
+      now,
+    );
   }
 
   /**

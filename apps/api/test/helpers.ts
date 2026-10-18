@@ -8,6 +8,7 @@ import {
   karmaEvents,
   lobbies,
   lobbyMembers,
+  notifications,
   users,
   type Database,
   type DbHandle,
@@ -401,3 +402,63 @@ export function assertNoExactPlace(body: unknown, where = 'response'): void {
   };
   visit(body, '$');
 }
+
+/** Lobby endpoints as a user calls them; raw responses. */
+export function lobbyApi(t: TestApp) {
+  const call = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, token: string, payload?: object) =>
+    t.app.inject({
+      method,
+      url,
+      headers: authHeader(token),
+      payload: method === 'GET' ? undefined : (payload ?? {}),
+    });
+  return {
+    detail: (token: string, id: string) => call('GET', `/api/lobbies/${id}`, token),
+    apply: (token: string, id: string) => call('POST', `/api/lobbies/${id}/applications`, token),
+    cancelOwn: (token: string, id: string) => call('DELETE', `/api/lobbies/${id}/applications/me`, token),
+    applications: (token: string, id: string) => call('GET', `/api/lobbies/${id}/applications`, token),
+    decide: (token: string, id: string, applicationId: string, decision: 'approve' | 'reject') =>
+      call('POST', `/api/lobbies/${id}/applications/${applicationId}/${decision}`, token),
+    cancel: (token: string, id: string, payload: object = { reason: 'plans_changed', comment: null }) =>
+      call('POST', `/api/lobbies/${id}/cancel`, token, payload),
+    prepareChat: (token: string, id: string, payload: object = {}) =>
+      call('POST', `/api/lobbies/${id}/chat/prepare`, token, payload),
+    checkIn: (token: string, id: string, point: object) =>
+      call('POST', `/api/lobbies/${id}/check-in`, token, point),
+    attendance: (token: string, id: string) => call('GET', `/api/lobbies/${id}/attendance`, token),
+    saveAttendance: (token: string, id: string, absentApplicationIds: string[]) =>
+      call('PUT', `/api/lobbies/${id}/attendance`, token, { absentApplicationIds }),
+  };
+}
+
+/** Lets every pending outbox row go out now (skips the debounce delay). */
+export async function makeOutboxDue(db: Database) {
+  await db
+    .update(notifications)
+    .set({ sendAfter: new Date() })
+    .where(sql`${notifications.sentAt} is null`);
+}
+
+/** The application id of a user in a lobby. */
+export async function applicationIdOf(db: Database, lobbyId: string, userId: string): Promise<string> {
+  const [row] = await db
+    .select({ id: lobbyMembers.id })
+    .from(lobbyMembers)
+    .where(and(eq(lobbyMembers.lobbyId, lobbyId), eq(lobbyMembers.userId, userId)));
+  if (!row) throw new Error('no application');
+  return row.id;
+}
+
+/** Links a meetup group to a lobby directly, as the chat flow would. */
+export async function linkChat(db: Database, lobbyId: string, chatId: number) {
+  const inviteLink = `https://t.me/+linked${Math.abs(chatId)}`;
+  await db
+    .update(lobbies)
+    .set({ chatId, chatTitle: 'Чат встречи', chatInviteLink: inviteLink, chatLinkedAt: new Date() })
+    .where(eq(lobbies.id, lobbyId));
+  return inviteLink;
+}
+
+let chatIdSeq = 0;
+/** A group id no other lobby of this test process has. */
+export const freshChatId = () => -1_000_000_000_000 - process.pid * 1000 - ++chatIdSeq;
