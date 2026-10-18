@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { lobbyMembers, type Database } from '@masl/db';
+import { applicationEvents, lobbyMembers, type Database } from '@masl/db';
 import {
   APPLICATIONS_PENDING_MAX,
   APPLICATIONS_PER_DAY_MAX,
@@ -99,6 +99,7 @@ export class ApplicationsService {
           updatedAt: now,
         });
       }
+      await tx.insert(applicationEvents).values({ userId, lobbyId, createdAt: now });
       return { created: true, lobby: await this.lobbies.detailFor(tx, { lobbyId, viewerId: userId, now }) };
     });
   }

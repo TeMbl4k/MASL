@@ -1,7 +1,16 @@
 import 'reflect-metadata';
 import { and, eq, sql } from 'drizzle-orm';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { createDb, karmaEvents, lobbies, lobbyMembers, users, type Database, type DbHandle } from '@masl/db';
+import {
+  applicationEvents,
+  createDb,
+  karmaEvents,
+  lobbies,
+  lobbyMembers,
+  users,
+  type Database,
+  type DbHandle,
+} from '@masl/db';
 import { createTestDatabase, type TestDatabase } from '@masl/db/testing';
 import {
   KARMA,
@@ -276,10 +285,13 @@ export async function shiftLobby(
     .where(eq(lobbies.id, lobbyId));
 }
 
-/** Moves the creation time of a lobby, or the application time of a membership, by `hours`. */
+/**
+ * Moves by `hours` the creation time of a lobby (`id` is the lobby), or of every apply event
+ * of a user (`id` is the user).
+ */
 export async function shiftCreatedAt(
   db: Database,
-  table: 'lobbies' | 'lobby_members',
+  table: 'lobbies' | 'application_events',
   id: string,
   hours: number,
 ) {
@@ -291,9 +303,9 @@ export async function shiftCreatedAt(
       .where(eq(lobbies.id, id));
   } else {
     await db
-      .update(lobbyMembers)
-      .set({ appliedAt: sql`${lobbyMembers.appliedAt} + ${ms} * interval '1 millisecond'` })
-      .where(eq(lobbyMembers.id, id));
+      .update(applicationEvents)
+      .set({ createdAt: sql`${applicationEvents.createdAt} + ${ms} * interval '1 millisecond'` })
+      .where(eq(applicationEvents.userId, id));
   }
 }
 

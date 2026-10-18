@@ -1,6 +1,7 @@
 import { and, asc, count, eq, gt, inArray, isNotNull, isNull, ne, not, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import {
+  applicationEvents,
   distanceMeters,
   geographyFrom,
   karmaEvents,
@@ -440,7 +441,7 @@ export interface ViewerContext {
   interests: LobbyCategory[];
   /** Pending applications on lobbies that have not started and are not cancelled. */
   pendingApplications: number;
-  /** Applications made in the last APPLICATIONS_WINDOW_HOURS. */
+  /** Applies (renewals included) in the last APPLICATIONS_WINDOW_HOURS. */
   applicationsInWindow: number;
 }
 
@@ -479,13 +480,14 @@ export async function loadViewerContext(
         ne(lobbies.status, 'cancelled'),
       ),
     );
+  // Apply events, not rows: a withdraw and re-apply reuses the row but counts again.
   const [applied] = await db
     .select({ n: count() })
-    .from(lobbyMembers)
+    .from(applicationEvents)
     .where(
       and(
-        eq(lobbyMembers.userId, userId),
-        gt(lobbyMembers.appliedAt, new Date(now.getTime() - APPLICATIONS_WINDOW_HOURS * HOUR_MS)),
+        eq(applicationEvents.userId, userId),
+        gt(applicationEvents.createdAt, new Date(now.getTime() - APPLICATIONS_WINDOW_HOURS * HOUR_MS)),
       ),
     );
   return {

@@ -15,6 +15,7 @@
 - **postgres.js под Drizzle не передаёт `Date` в сыром `` sql`${date}` ``** («The "string" argument must be of type string… Received an instance of Date»). Используйте `at(date)` из `apps/api/src/lobbies/lobby-queries.ts` (ISO-строка с `::timestamptz`) или операторы Drizzle по столбцу.
 - **Сырой `db.execute()` возвращает `timestamptz` и `numeric` строками**, а не `Date` и числом.
 - **`GROUP BY` по выражению с параметром** (`at time zone $1`) не совпадает с тем же выражением в `SELECT`: у них разные номера параметров. Группируйте по номеру столбца: ``groupBy(sql`1`)``.
+- **Суточный лимит заявок считает `application_events`, а не `lobby_members`:** тест, который заводит заявки через `setMembership`, для лимита должен добавить и строки журнала (сдвиг окна — `shiftCreatedAt(db, 'application_events', userId, …)`).
 - **Drizzle в выборке из одной таблицы пишет столбцы без имени таблицы.** Проверка SQL на утечку точного места ищет `"location"`/`"address"`, а не только `"lobbies"."location"`.
 - **Drizzle заворачивает ошибку драйвера в `DrizzleQueryError`**: код ошибки (`ECONNREFUSED`, `57P03`) лежит в `.cause`, а не в самой ошибке. См. `errorCode()` в `packages/db/src/bin/migrate.ts`.
 - **postgres.js передаёт неизвестные параметры строки подключения серверу** как настройки сессии, и подключение падает. Neon добавляет `channel_binding=require`: его убирает `normalizeDatabaseUrl()` в `packages/db/src/client.ts`.

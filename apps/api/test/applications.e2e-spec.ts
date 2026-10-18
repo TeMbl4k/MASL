@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { lobbies, lobbyMembers, users } from '@masl/db';
+import { applicationEvents, lobbies, lobbyMembers, users } from '@masl/db';
 import {
   APPLICATIONS_PENDING_MAX,
   APPLICATIONS_PER_DAY_MAX,
@@ -244,17 +244,33 @@ describe.skipIf(!adminUrl)('lobby applications e2e (requires TEST_DATABASE_URL)'
     it(`429 for the ${APPLICATIONS_PER_DAY_MAX + 1}st application in 24 h`, async () => {
       const host = await t.loginOnboarded();
       const applicant = await t.loginOnboarded();
-      const rows: string[] = [];
       for (let i = 0; i < APPLICATIONS_PER_DAY_MAX; i++) {
         const lobby = await insertLobby(t.db, { hostId: host.user.id });
-        rows.push((await setMembership(t.db, lobby.id, applicant.user.id, 'rejected')).id);
+        await setMembership(t.db, lobby.id, applicant.user.id, 'rejected');
+        await t.db.insert(applicationEvents).values({ userId: applicant.user.id, lobbyId: lobby.id });
       }
       const next = await insertLobby(t.db, { hostId: host.user.id });
       expectError(await apply(applicant.token, next.id), 429, 'applications_daily_limit');
 
       // The window is rolling: once the applications are older than 24 h, the cap lifts.
-      for (const id of rows) await shiftCreatedAt(t.db, 'lobby_members', id, -25);
+      await shiftCreatedAt(t.db, 'application_events', applicant.user.id, -25);
       expect((await apply(applicant.token, next.id)).statusCode).toBe(201);
+    });
+
+    it(`withdrawing and re-applying counts every apply towards the ${APPLICATIONS_PER_DAY_MAX} a day`, async () => {
+      const host = await t.loginOnboarded();
+      const applicant = await t.loginOnboarded();
+      const lobby = await insertLobby(t.db, { hostId: host.user.id });
+      for (let i = 0; i < APPLICATIONS_PER_DAY_MAX; i++) {
+        // Only the daily cap is under test, not the per-minute limits.
+        t.resetRateLimits();
+        expect((await apply(applicant.token, lobby.id)).statusCode, `apply ${i + 1}`).toBe(201);
+        expect((await cancelOwn(applicant.token, lobby.id)).statusCode, `cancel ${i + 1}`).toBe(200);
+      }
+      t.resetRateLimits();
+      expectError(await apply(applicant.token, lobby.id), 429, 'applications_daily_limit');
+      const other = await insertLobby(t.db, { hostId: host.user.id });
+      expectError(await apply(applicant.token, other.id), 429, 'applications_daily_limit');
     });
 
     it('T-ABUSE-7 (apply): 403 not_onboarded before anything else', async () => {

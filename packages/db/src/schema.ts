@@ -181,8 +181,6 @@ export const lobbyMembers = pgTable(
     uniqueIndex('lobby_members_lobby_user_uq').on(t.lobbyId, t.userId),
     index('lobby_members_user_status_idx').on(t.userId, t.status),
     index('lobby_members_lobby_status_idx').on(t.lobbyId, t.status),
-    // Applications-per-day cap.
-    index('lobby_members_user_applied_idx').on(t.userId, t.appliedAt),
     // 'cancelled' with decided_at set means approved, then left.
     check(
       'lobby_members_decided_chk',
@@ -193,6 +191,25 @@ export const lobbyMembers = pgTable(
       sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`,
     ),
   ],
+);
+
+/**
+ * One row per apply, renewals after a withdrawal included (lobby_members keeps only the last).
+ * Append-only; the applications-per-day cap counts these rows.
+ */
+export const applicationEvents = pgTable(
+  'application_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lobbyId: uuid('lobby_id')
+      .notNull()
+      .references(() => lobbies.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('application_events_user_created_idx').on(t.userId, t.createdAt)],
 );
 
 export const karmaEvents = pgTable(
@@ -224,3 +241,4 @@ export type Lobby = typeof lobbies.$inferSelect;
 export type NewLobby = typeof lobbies.$inferInsert;
 export type LobbyMember = typeof lobbyMembers.$inferSelect;
 export type KarmaEvent = typeof karmaEvents.$inferSelect;
+export type ApplicationEvent = typeof applicationEvents.$inferSelect;
