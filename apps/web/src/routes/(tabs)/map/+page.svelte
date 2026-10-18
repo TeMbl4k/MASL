@@ -150,7 +150,7 @@
 {/snippet}
 
 {#if mapFailed}
-  <main class="min-h-dvh">
+  <main class="min-h-app">
     <header class="flex flex-col gap-4 px-5 pt-5">
       <h1 tabindex="-1" class="text-3xl font-light tracking-tight outline-none">Карта</h1>
       <p class="text-sm text-gray-light">Карта недоступна на этом устройстве — показываем списком</p>
@@ -186,9 +186,9 @@
     </div>
   </main>
 {:else}
-  <!-- -mb-4 cancels the extra 1rem the tabs layout keeps under the tab bar, so the page doesn't scroll. -->
+  <!-- Pinned between the top inset and the tab bar, so the map's bottom edge is the bar's top. -->
   <main
-    class="relative -mb-4 h-[calc(var(--tg-viewport-stable-height,100dvh)-var(--tab-bar-height)-var(--safe-bottom))] overflow-hidden"
+    class="fixed inset-x-0 top-(--safe-top) bottom-[calc(var(--tab-bar-height)+var(--safe-bottom))] overflow-hidden"
   >
     <h1 class="sr-only" tabindex="-1">Карта встреч</h1>
     {#if LobbyMap}
@@ -232,7 +232,7 @@
       {/if}
     </div>
 
-    <div class="absolute inset-x-0 bottom-0 flex justify-between gap-3 px-4 pb-16">
+    <div class="absolute inset-x-0 bottom-0 flex justify-between gap-3 px-4 pb-3">
       <button
         type="button"
         class="flex min-h-11 items-center gap-2 rounded-full border border-gray-dark bg-ink/90 px-3.5 text-sm disabled:opacity-60"
@@ -254,3 +254,10 @@
 {/if}
 
 <MapPlaceSheet place={selected} />
+
+<style>
+  /* The credits' «i» sits above «Где я» and «Списком», which keep the map's bottom edge. */
+  main :global(.maplibregl-ctrl-bottom-right) {
+    bottom: 3.5rem;
+  }
+</style>

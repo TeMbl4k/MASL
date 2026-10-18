@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  attendanceDeadline,
+  attendanceState,
+  checkInWindow,
   classifyMetroDistance,
+  isHostLateCancel,
+  lowerMinKarma,
   effectiveLobbyStatus,
   isInMoscowBounds,
   isLateCancel,
@@ -139,5 +144,62 @@ describe('rounding', () => {
     expect(roundDistance(2449)).toBe(2400);
     expect(roundDistance(2450)).toBe(2500);
     expect(roundDistance(12_034.7)).toBe(12_000);
+  });
+});
+
+describe('isHostLateCancel', () => {
+  const lobby = (startsIn: number, approvedCount: number) => ({
+    startsAt: at(startsIn),
+    slots: 3,
+    approvedCount,
+  });
+
+  it('penalizes only a full lobby within the last hour', () => {
+    expect(isHostLateCancel(lobby(59 * MINUTE, 3), now)).toBe(true);
+    expect(isHostLateCancel(lobby(59 * MINUTE, 2), now)).toBe(false);
+    expect(isHostLateCancel(lobby(HOUR, 3), now)).toBe(false);
+    expect(isHostLateCancel(lobby(2 * HOUR, 3), now)).toBe(false);
+  });
+});
+
+describe('lowerMinKarma', () => {
+  it('steps down one preset and drops the threshold below the lowest', () => {
+    expect(lowerMinKarma(80)).toBe(70);
+    expect(lowerMinKarma(55)).toBe(50);
+    expect(lowerMinKarma(50)).toBe(40);
+    expect(lowerMinKarma(40)).toBeNull();
+    expect(lowerMinKarma(20)).toBeNull();
+    expect(lowerMinKarma(100)).toBe(80);
+  });
+});
+
+describe('checkInWindow', () => {
+  const lobby = { startsAt: at(HOUR), endsAt: at(3 * HOUR) };
+
+  it('opens 30 minutes before the start and closes at the end', () => {
+    expect(checkInWindow(lobby, at(29 * MINUTE))).toBe('not_open');
+    expect(checkInWindow(lobby, at(30 * MINUTE))).toBe('open');
+    expect(checkInWindow(lobby, at(3 * HOUR - 1))).toBe('open');
+    expect(checkInWindow(lobby, at(3 * HOUR))).toBe('closed');
+  });
+});
+
+describe('attendanceState', () => {
+  const base = {
+    status: 'finished' as const,
+    endsAt: now,
+    attendanceSavedAt: null,
+    attendanceClosedAt: null,
+  };
+
+  it('is open from the end for 48 hours unless saved or closed', () => {
+    expect(attendanceDeadline(now).getTime() - now.getTime()).toBe(48 * HOUR);
+    expect(attendanceState({ ...base, status: 'active' }, at(-1))).toBe('not_yet');
+    expect(attendanceState(base, now)).toBe('open');
+    expect(attendanceState(base, at(48 * HOUR - 1))).toBe('open');
+    expect(attendanceState(base, at(48 * HOUR))).toBe('closed');
+    expect(attendanceState({ ...base, attendanceSavedAt: now }, at(HOUR))).toBe('saved');
+    expect(attendanceState({ ...base, attendanceClosedAt: now }, at(HOUR))).toBe('closed');
+    expect(attendanceState({ ...base, status: 'cancelled' }, at(HOUR))).toBe('not_yet');
   });
 });

@@ -4,6 +4,7 @@ import { applicationEvents, lobbyMembers, type Database } from '@masl/db';
 import {
   APPLICATIONS_PENDING_MAX,
   APPLICATIONS_PER_DAY_MAX,
+  HOST_APPLICATIONS_NOTIFY_DELAY_SECONDS,
   KARMA,
   OCCUPYING_MEMBERSHIP_STATUSES,
   isLateCancel,
@@ -13,6 +14,7 @@ import {
   type LobbyDetailDto,
   type MembershipStatus,
 } from '@masl/shared';
+import { OutboxService } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
@@ -21,6 +23,7 @@ import { LobbiesService } from './lobbies.service.js';
 import { toApplicant, toLobbyCard } from './lobby.mapper.js';
 import {
   applicantsQuery,
+  loadActiveChat,
   lockApplication,
   lockLobby,
   lockOwnMembership,
@@ -42,6 +45,7 @@ export class ApplicationsService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(LobbiesService) private readonly lobbies: LobbiesService,
     @Inject(KarmaService) private readonly karma: KarmaService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   /**
@@ -100,6 +104,20 @@ export class ApplicationsService {
         });
       }
       await tx.insert(applicationEvents).values({ userId, lobbyId, createdAt: now });
+      // Applications arriving close together reach the host as one message.
+      await this.outbox.enqueue(
+        tx,
+        [
+          {
+            kind: 'host_new_applications',
+            userId: row.hostId,
+            lobbyId,
+            dedupeKey: `host_apps:${lobbyId}`,
+            sendAfter: new Date(now.getTime() + HOST_APPLICATIONS_NOTIFY_DELAY_SECONDS * 1000),
+          },
+        ],
+        now,
+      );
       return { created: true, lobby: await this.lobbies.detailFor(tx, { lobbyId, viewerId: userId, now }) };
     });
   }
@@ -128,6 +146,19 @@ export class ApplicationsService {
         .where(and(eq(lobbyMembers.id, membership.id), eq(lobbyMembers.status, membership.status)));
 
       let karmaDelta = 0;
+      if (membership.status === 'approved') {
+        const chatId = membership.chatJoinedAt ? await loadActiveChat(tx, lobbyId) : null;
+        await this.outbox.enqueue(
+          tx,
+          [
+            { kind: 'host_member_left', userId: row.hostId, lobbyId, memberId: membership.id },
+            ...(chatId === null
+              ? []
+              : [{ kind: 'group_kick' as const, chatId, lobbyId, memberId: membership.id }]),
+          ],
+          now,
+        );
+      }
       if (membership.status === 'approved' && isLateCancel(row.startsAt, now)) {
         const applied = await this.karma.apply(tx, {
           userId,
@@ -136,7 +167,7 @@ export class ApplicationsService {
           delta: KARMA.LATE_CANCEL,
           now,
         });
-        if (applied) karmaDelta = KARMA.LATE_CANCEL;
+        if (applied !== null) karmaDelta = applied;
       }
       return { lobby: await detail(), karmaDelta };
     });
@@ -186,6 +217,18 @@ export class ApplicationsService {
           .update(lobbyMembers)
           .set({ status: target, decidedAt: now, updatedAt: now })
           .where(and(eq(lobbyMembers.id, application.id), eq(lobbyMembers.status, 'pending')));
+        await this.outbox.enqueue(
+          tx,
+          [
+            {
+              kind: decision === 'approve' ? 'member_approved' : 'member_rejected',
+              userId: application.userId,
+              lobbyId,
+              memberId: application.id,
+            },
+          ],
+          now,
+        );
       }
       return this.hostApplications(tx, lobbyId, userId, now);
     });

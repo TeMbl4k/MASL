@@ -5,7 +5,6 @@ import {
   HOUR_MS,
   type Instant,
   type KarmaReason,
-  type LobbyCancelReason,
   type LobbyStatus,
   type MembershipStatus,
   type PaymentFormat,
@@ -17,14 +16,11 @@ export const KARMA_REASON_LABELS: Readonly<Record<KarmaReason, string>> = {
   late_cancel: 'Поздняя отмена',
   no_show: 'Не пришли',
   host_late_cancel: 'Поздняя отмена встречи хостом',
+  hosted: 'Провели встречу',
   manual: 'Изменение модератором',
 };
 
-export const LOBBY_CANCEL_REASON_LABELS: Readonly<Record<LobbyCancelReason, string>> = {
-  not_enough_people: 'Не набрались участники',
-  plans_changed: 'Изменились планы',
-  other: 'Другое',
-};
+export { LOBBY_CANCEL_REASON_LABELS } from '@masl/shared';
 
 export const PAYMENT_FORMAT_LABELS: Readonly<Record<PaymentFormat, string>> = {
   free: 'Бесплатно',

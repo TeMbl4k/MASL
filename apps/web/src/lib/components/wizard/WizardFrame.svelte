@@ -17,7 +17,7 @@
   const label = $derived(`Шаг ${step} из ${STEPS} · ${STEP_NAMES[step]}`);
 </script>
 
-<main class="min-h-dvh px-5 pt-5 {step === 1 ? 'bg-brand-glow' : ''}">
+<main class="min-h-app px-5 pt-5 {step === 1 ? 'bg-brand-glow' : ''}">
   <div class="mx-auto flex max-w-lg flex-col gap-6">
     <header class="flex flex-col gap-2.5">
       <WizardBack />

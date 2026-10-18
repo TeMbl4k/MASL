@@ -13,6 +13,12 @@ export const KARMA = {
   LATE_CANCEL: -15,
   /** Silent no-show. */
   NO_SHOW: -30,
+  /** Hosted a meetup that at least one member attended (decisions.md, stage 3). */
+  HOSTED: 10,
+  /** Host cancelled less than HOST_LATE_CANCEL_HOURS before the start with every slot taken. */
+  HOST_LATE_CANCEL: -30,
+  /** Ceiling: positive changes are clamped so karma never exceeds it (decisions.md, stage 3). */
+  MAX: 100,
 } as const;
 
 /** Late-cancel window for participants, in hours before the start. */
@@ -23,6 +29,18 @@ export const QUORUM_CHECK_HOURS_BEFORE = 1;
 export const HOST_LATE_CANCEL_HOURS = 1;
 /** Hours after the end when the bot asks the host who showed up. */
 export const ATTENDANCE_POLL_HOURS_AFTER = 2;
+/** Hours after the end when the bot reminds a host who hasn't marked attendance. */
+export const ATTENDANCE_REMINDER_HOURS_AFTER = 24;
+/** Hours after the end when attendance closes for good; the bot also leaves the meetup group then. */
+export const ATTENDANCE_CLOSE_HOURS_AFTER = 48;
+/** «Я на месте» opens this many minutes before the start and stays open until the end. */
+export const CHECK_IN_OPENS_MINUTES_BEFORE = 30;
+/** «Я на месте» needs the member within this distance of the exact point. */
+export const CHECK_IN_RADIUS_M = 500;
+/** New applications are collected for this long into one message to the host. */
+export const HOST_APPLICATIONS_NOTIFY_DELAY_SECONDS = 60;
+/** A «Создать чат встречи» request is valid for this long. */
+export const CHAT_REQUEST_TTL_MINUTES = 30;
 /** Daily lobby creation limit for new users. */
 export const NEWBIE_LOBBIES_PER_DAY = 1;
 /** Independent reports that trigger a shadow ban pending review. */
@@ -126,5 +144,9 @@ export const RATE_LIMITS = {
   placeSuggest: { limit: 30, windowSeconds: 60 },
   placeSuggestDaily: { limit: 300, windowSeconds: 86_400 },
   placeReverse: { limit: 20, windowSeconds: 60 },
+  checkIn: { limit: 10, windowSeconds: 60 },
+  attendanceWrite: { limit: 20, windowSeconds: 60 },
+  /** Taps on the bot's inline buttons. */
+  botCallback: { limit: 30, windowSeconds: 60 },
 } as const;
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

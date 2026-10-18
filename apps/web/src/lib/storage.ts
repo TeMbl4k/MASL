@@ -6,6 +6,8 @@
 export const STORAGE_KEYS = [
   /** Station id chosen as the feed origin. */
   'masl:origin-station:v1',
+  /** How the feed origin was last chosen without a station: `geo` or `city`. Never coordinates. */
+  'masl:origin-choice:v1',
   /** JSON array of recently picked station ids. */
   'masl:recent-stations:v1',
   /** Wizard draft without point and address (wizard/draft-codec.ts). */

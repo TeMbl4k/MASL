@@ -84,7 +84,7 @@
       aria-labelledby={titleId}
       tabindex="-1"
       {onkeydown}
-      class="relative mx-auto flex max-h-[85dvh] w-full max-w-lg flex-col rounded-t-3xl border-t border-gray-dark bg-[color-mix(in_srgb,var(--color-gray-dark)_40%,var(--color-ink))] outline-none"
+      class="relative mx-auto flex max-h-[min(85dvh,calc(100dvh-var(--safe-top)-1rem))] w-full max-w-lg flex-col rounded-t-3xl border-t border-gray-dark bg-[color-mix(in_srgb,var(--color-gray-dark)_40%,var(--color-ink))] outline-none"
     >
       <div class="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-gray-dark" aria-hidden="true"></div>
       <div class="flex shrink-0 items-center justify-between gap-3 px-5 pt-3 pb-2">

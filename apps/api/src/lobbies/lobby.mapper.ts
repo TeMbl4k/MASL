@@ -1,6 +1,10 @@
 import {
   LOBBY_CANCEL_REASONS,
+  attendanceDeadline,
+  attendanceState,
+  checkInOpensAt,
   effectiveLobbyStatus,
+  hostLateCancelFrom,
   meetsMinKarma,
   roundDistance,
   APPLICATIONS_PENDING_MAX,
@@ -12,6 +16,7 @@ import {
   type LobbyAccess,
   type LobbyCancelReason,
   type LobbyCardDto,
+  type LobbyChatDto,
   type LobbyDetailDto,
   type LobbyStatus,
   type MembershipStatus,
@@ -21,7 +26,7 @@ import {
 import { stationById } from '@masl/shared/metro';
 import { z } from 'zod';
 import type { GeoPoint } from '@masl/db';
-import type { ApplicantRow, LobbyCardRow, ViewerContext } from './lobby-queries.js';
+import type { ApplicantRow, DetailExtrasRow, LobbyCardRow, ViewerContext } from './lobby-queries.js';
 
 /**
  * Rows → DTOs. Every DTO is a new object with named fields; rows are never spread, so a column
@@ -132,6 +137,56 @@ export type DetailAccess =
   | { access: Extract<LobbyAccess, 'public'> }
   | { access: Extract<LobbyAccess, 'member' | 'host'>; exactPlace: ExactPlaceDto };
 
+/** Detail parts that depend on the viewer's role; each is null for anyone else. */
+export type DetailExtras = Pick<LobbyDetailDto, 'chat' | 'cancelPolicy' | 'checkIn' | 'attendance'>;
+
+export const NO_EXTRAS: DetailExtras = { chat: null, cancelPolicy: null, checkIn: null, attendance: null };
+
+/**
+ * The host gets the group, the cancel policy before the start and attendance after the end; an
+ * approved member gets the group and «Я на месте» while the lobby is open or active. Everyone
+ * else, and members after the end, get nulls.
+ */
+export function toDetailExtras(card: LobbyCardDto, row: DetailExtrasRow, now: Date): DetailExtras {
+  const isHost = card.viewer.isHost;
+  const status = card.status;
+  const ongoing = status === 'open' || status === 'active';
+  const memberOngoing = !isHost && card.viewer.membershipStatus === 'approved' && ongoing;
+  const linked = row.chatId !== null && row.chatClosedAt === null;
+  const chat: LobbyChatDto | null =
+    (isHost && ongoing) || memberOngoing
+      ? {
+          state: linked ? 'linked' : 'none',
+          title: linked ? row.chatTitle : null,
+          inviteLink: linked ? row.chatInviteLink : null,
+        }
+      : null;
+  return {
+    chat,
+    cancelPolicy:
+      isHost && status === 'open'
+        ? {
+            lateFrom: hostLateCancelFrom(card.startsAt).toISOString(),
+            quorumMet: card.approvedCount >= card.slots,
+          }
+        : null,
+    checkIn: memberOngoing
+      ? {
+          opensAt: checkInOpensAt(card.startsAt).toISOString(),
+          closesAt: card.endsAt,
+          checkedInAt: row.checkedInAt?.toISOString() ?? null,
+        }
+      : null,
+    attendance:
+      isHost && status === 'finished'
+        ? {
+            state: attendanceState({ status, endsAt: card.endsAt, ...row }, now),
+            deadline: attendanceDeadline(card.endsAt).toISOString(),
+          }
+        : null,
+  };
+}
+
 /** The detail; `exactPlace` exists only for member and host access. */
 export function toLobbyDetail(
   row: LobbyCardRow,
@@ -139,13 +194,20 @@ export function toLobbyDetail(
   now: Date,
   access: DetailAccess,
   members: PersonDto[] | null,
+  extrasRow: DetailExtrasRow | null = null,
 ): LobbyDetailDto {
+  const card = toLobbyCard(row, viewer, now);
+  const extras = extrasRow ? toDetailExtras(card, extrasRow, now) : NO_EXTRAS;
   const base = {
-    ...toLobbyCard(row, viewer, now),
+    ...card,
     description: row.description,
     cancelReason: parseCancelReason(row.cancelReason),
     cancelComment: row.cancelComment,
     members,
+    chat: extras.chat,
+    cancelPolicy: extras.cancelPolicy,
+    checkIn: extras.checkIn,
+    attendance: extras.attendance,
   };
   return access.access === 'public'
     ? { ...base, access: 'public' }

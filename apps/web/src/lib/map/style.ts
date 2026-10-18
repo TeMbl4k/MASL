@@ -70,6 +70,17 @@ export function darkenStyle(style: StyleSpecification): StyleSpecification {
 }
 
 /**
+ * Folds the attribution into its «i» button once the map is up. MapLibre's compact mode shows
+ * the full text until the first drag, and on a phone it covers the map's own buttons. The data
+ * licenses (ODbL, CC BY-SA) allow the credits behind a button that opens them.
+ */
+export function foldAttribution(map: MapLibreMap): void {
+  map.once('load', () => {
+    map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
+  });
+}
+
+/**
  * Switches to the darkened fallback style when the main style fails to load, and calls `onfail`
  * when the fallback fails too. Only errors before a style has loaded count: later ones come from
  * tiles, sprites or glyphs and leave the map usable (`isStyleLoaded()` is false while tiles load).

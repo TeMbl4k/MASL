@@ -8,7 +8,7 @@
   import { haptic } from '#lib/tg/haptics.js';
   import { requestUserLocation } from '#lib/tg/location.js';
   import { loadMaplibre } from './maplibre.js';
-  import { attachStyleFallback, baseMapOptions, MAP_PLACE_ZOOM } from './style.js';
+  import { attachStyleFallback, baseMapOptions, foldAttribution, MAP_PLACE_ZOOM } from './style.js';
 
   interface Props {
     /** The pin; null until the host moves the map, picks a suggestion or locates. */
@@ -55,6 +55,7 @@
           zoom: MAP_PLACE_ZOOM,
         });
         attachStyleFallback(instance);
+        foldAttribution(instance);
         instance.on('moveend', () => {
           const center = instance.getCenter();
           onmove({ lat: round(center.lat), lng: round(center.lng) });

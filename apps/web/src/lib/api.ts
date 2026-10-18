@@ -1,9 +1,12 @@
 import {
+  attendanceResponse,
   cancelApplicationResponse,
+  chatPrepareResponse,
   creationContextDto,
   feedResponse,
   hostApplicationsResponse,
   karmaEventsResponse,
+  cancelLobbyResponse,
   lobbyDetailDto,
   mapResponse,
   meDto,
@@ -12,6 +15,8 @@ import {
   placeSuggestResponse,
   type AuthResponse,
   type CancelLobbyInput,
+  type ChatPrepareInput,
+  type CheckInInput,
   type CreateLobbyInput,
   type FeedQuery,
   type GeoPointDto,
@@ -122,7 +127,7 @@ export const api = {
     ),
   cancelLobby: (token: string, id: string, input: CancelLobbyInput) =>
     parsed(
-      lobbyDetailDto,
+      cancelLobbyResponse,
       request(`${lobbyPath(id)}/cancel`, { method: 'POST', token, body: JSON.stringify(input) }),
     ),
   // Mutations without data still send `{}`: a tunnel or proxy may forward an empty body as chunked,
@@ -145,6 +150,32 @@ export const api = {
     parsed(
       hostApplicationsResponse,
       request(`${applicationPath(id, applicationId)}/reject`, { method: 'POST', token, body: '{}' }),
+    ),
+  prepareChat: (token: string, id: string, input: ChatPrepareInput) =>
+    parsed(
+      chatPrepareResponse,
+      request(`${lobbyPath(id)}/chat/prepare`, { method: 'POST', token, body: JSON.stringify(input) }),
+    ),
+  // POST: the device position stays out of URLs and access logs.
+  checkIn: (token: string, id: string, point: CheckInInput) =>
+    parsed(
+      lobbyDetailDto,
+      request(`${lobbyPath(id)}/check-in`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ lat: point.lat, lng: point.lng }),
+      }),
+    ),
+  attendance: (token: string, id: string, signal?: AbortSignal) =>
+    parsed(attendanceResponse, request(`${lobbyPath(id)}/attendance`, { token, signal })),
+  saveAttendance: (token: string, id: string, absentApplicationIds: string[]) =>
+    parsed(
+      attendanceResponse,
+      request(`${lobbyPath(id)}/attendance`, {
+        method: 'PUT',
+        token,
+        body: JSON.stringify({ absentApplicationIds }),
+      }),
     ),
   myLobbies: (token: string) => parsed(myLobbiesResponse, request('/me/lobbies', { token })),
   karmaEvents: (token: string) => parsed(karmaEventsResponse, request('/me/karma-events', { token })),

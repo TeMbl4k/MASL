@@ -1,4 +1,11 @@
-import type { CancelApplicationResponse, CancelLobbyInput, LobbyCardDto, LobbyDetailDto } from '@masl/shared';
+import type {
+  CancelApplicationResponse,
+  CheckInInput,
+  CancelLobbyInput,
+  CancelLobbyResponse,
+  LobbyCardDto,
+  LobbyDetailDto,
+} from '@masl/shared';
 import { SvelteMap } from 'svelte/reactivity';
 import { api, ApiError } from '../api.js';
 import { cardOf, detailMatchesCard } from '../lobby-card.js';
@@ -92,12 +99,29 @@ class LobbyCache {
     });
   }
 
-  cancelLobby(id: string, input: CancelLobbyInput): Promise<LobbyDetailDto> {
+  /** Cancels the host's lobby; a late cancel of a full lobby costs karma and blocks creation. */
+  cancelLobby(id: string, input: CancelLobbyInput): Promise<CancelLobbyResponse> {
     return this.#mutate(id, async () => {
-      const detail = await session.authorized((token) => api.cancelLobby(token, id, input));
+      const response = await session.authorized((token) => api.cancelLobby(token, id, input));
+      this.#store(response.lobby);
+      if (response.karmaDelta !== 0) void this.#refreshUser();
+      return response;
+    });
+  }
+
+  /** «Я на месте» of an approved member; the point goes to the API and is not kept. */
+  checkIn(id: string, point: CheckInInput): Promise<LobbyDetailDto> {
+    return this.#mutate(id, async () => {
+      const detail = await session.authorized((token) => api.checkIn(token, id, point));
       this.#store(detail);
       return detail;
     });
+  }
+
+  /** After the host's attendance save: karma moved for the host too. */
+  attendanceSaved(): void {
+    this.#mutated();
+    void this.#refreshUser();
   }
 
   #version(id: string): number {

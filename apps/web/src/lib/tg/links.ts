@@ -1,4 +1,4 @@
-import { copyTextToClipboard, openLink } from '@telegram-apps/sdk';
+import { copyTextToClipboard, openLink, openTelegramLink } from '@telegram-apps/sdk';
 import { session } from '../session.svelte.js';
 
 /** Yandex Maps URL with a pin; the point is the exact one, so only call this from a member's tap. */
@@ -11,6 +11,14 @@ export function openInMaps(point: { lat: number; lng: number }): void {
   const url = yandexMapsUrl(point);
   // Under the dev mock openLink reports success but posts to nobody.
   const [opened] = session.inTelegram ? openLink.ifAvailable(url) : [false];
+  if (!opened) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
+
+/** Opens a t.me link (the bot, a group invite) inside Telegram. Call only from a tap. */
+export function openInTelegram(url: string): void {
+  const [opened] = session.inTelegram ? openTelegramLink.ifAvailable(url) : [false];
   if (!opened) {
     window.open(url, '_blank', 'noopener,noreferrer');
   }

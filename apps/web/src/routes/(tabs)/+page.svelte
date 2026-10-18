@@ -74,7 +74,7 @@
   </a>
 {/snippet}
 
-<main class="bg-brand-glow min-h-dvh">
+<main class="bg-brand-glow min-h-app">
   <header class="flex flex-col gap-4 px-5 pt-5">
     <div class="flex items-center gap-3">
       {#if user}
@@ -102,7 +102,7 @@
       <ChevronDown size={16} class="text-gray-light" />
     </button>
 
-    {#if origin.current === null && feed.status !== 'idle'}
+    {#if origin.current === null && !origin.silentLocating && feed.status !== 'idle'}
       <section class="flex flex-col gap-3 rounded-3xl border border-gray-dark bg-ink/60 p-4">
         <h2 class="font-semibold">Покажем встречи рядом</h2>
         <div class="flex flex-wrap gap-2">

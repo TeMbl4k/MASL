@@ -132,7 +132,7 @@ describe.skipIf(!adminUrl)('lobby creation limits e2e (requires TEST_DATABASE_UR
     expect(response.json()).toEqual({
       statusCode: 403,
       code: 'creation_blocked',
-      message: 'Создание встреч приостановлено. Обжаловать можно будет позже',
+      message: 'Создание встреч заблокировано после отмены в последний час. Обжаловать можно будет позже',
     });
     expect(await hostedCount(host.user.id)).toBe(0);
 
@@ -145,7 +145,7 @@ describe.skipIf(!adminUrl)('lobby creation limits e2e (requires TEST_DATABASE_UR
       payload: { reason: 'plans_changed' },
     });
     expect(cancel.statusCode).toBe(200);
-    expect(cancel.json()).toMatchObject({ status: 'cancelled' });
+    expect(cancel.json()).toMatchObject({ lobby: { status: 'cancelled' } });
   });
 
   it('T-ABUSE-7 (create): a user who has not finished onboarding gets 403 not_onboarded', async () => {

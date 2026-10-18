@@ -728,6 +728,7 @@ describe.skipIf(!adminUrl)('lobby applications e2e (requires TEST_DATABASE_URL)'
       hosting: { upcoming: [], past: [] },
       joined: { upcoming: [], past: [] },
       counts: { hosted: 0, joined: 0 },
+      attendanceDue: [],
     });
     expect(karmaEventsResponse.parse((await get(b.token, '/api/me/karma-events')).json()).items).toEqual([]);
     expect(karmaEventsResponse.parse((await get(a.token, '/api/me/karma-events')).json()).items).toHaveLength(

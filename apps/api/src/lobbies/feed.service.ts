@@ -25,6 +25,7 @@ import {
   feedPageQuery,
   hostedLobbiesQuery,
   joinedLobbiesQuery,
+  loadAttendanceDue,
   loadMyCounts,
   mapLobbiesQuery,
   originOf,
@@ -126,19 +127,22 @@ export class FeedService {
   async myLobbies(viewerId: string): Promise<MyLobbiesResponse> {
     const now = this.clock.now();
     const viewer = await this.lobbies.viewer(this.db, viewerId, now);
-    const [hostingUpcoming, hostingPast, joinedUpcoming, joinedPast, counts] = await Promise.all([
-      hostedLobbiesQuery(this.db, viewerId, now, 'upcoming', UPCOMING_LIST_MAX),
-      hostedLobbiesQuery(this.db, viewerId, now, 'past', MY_LOBBIES_PAST_LIMIT),
-      joinedLobbiesQuery(this.db, viewerId, now, 'upcoming', UPCOMING_LIST_MAX),
-      joinedLobbiesQuery(this.db, viewerId, now, 'past', MY_LOBBIES_PAST_LIMIT),
-      loadMyCounts(this.db, viewerId),
-    ]);
+    const [hostingUpcoming, hostingPast, joinedUpcoming, joinedPast, counts, attendanceDue] =
+      await Promise.all([
+        hostedLobbiesQuery(this.db, viewerId, now, 'upcoming', UPCOMING_LIST_MAX),
+        hostedLobbiesQuery(this.db, viewerId, now, 'past', MY_LOBBIES_PAST_LIMIT),
+        joinedLobbiesQuery(this.db, viewerId, now, 'upcoming', UPCOMING_LIST_MAX),
+        joinedLobbiesQuery(this.db, viewerId, now, 'past', MY_LOBBIES_PAST_LIMIT),
+        loadMyCounts(this.db, viewerId),
+        loadAttendanceDue(this.db, viewerId, now),
+      ]);
     const cards = (rows: Parameters<typeof toLobbyCard>[0][]) =>
       rows.map((row) => toLobbyCard(row, viewer, now));
     return {
       hosting: { upcoming: cards(hostingUpcoming), past: cards(hostingPast) },
       joined: { upcoming: cards(joinedUpcoming), past: cards(joinedPast) },
       counts,
+      attendanceDue,
     };
   }
 }

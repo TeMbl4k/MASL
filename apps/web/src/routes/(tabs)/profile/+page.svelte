@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CreationContextDto } from '@masl/shared';
+  import { CREATION_BLOCKED_TITLE, type CreationContextDto } from '@masl/shared';
   import { onMount } from 'svelte';
   import { api } from '#lib/api.js';
   import Avatar from '#lib/components/Avatar.svelte';
@@ -41,7 +41,7 @@
   <title>Профиль — MASL</title>
 </svelte:head>
 
-<main class="min-h-dvh px-5 pt-7">
+<main class="min-h-app px-5 pt-7">
   {#if user}
     <div class="flex flex-col gap-5">
       <header class="flex items-center gap-4">
@@ -65,7 +65,7 @@
           role="status"
         >
           <Alert size={18} class="shrink-0 text-brand-light" />
-          Создание встреч приостановлено
+          {CREATION_BLOCKED_TITLE}
         </p>
       {/if}
 

@@ -1,5 +1,20 @@
-import { and, asc, count, eq, gt, inArray, isNotNull, isNull, ne, not, or, sql, type SQL } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  not,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
+import { alias, type AnyPgColumn, type AnyPgTable } from 'drizzle-orm/pg-core';
 import {
   applicationEvents,
   distanceMeters,
@@ -15,6 +30,7 @@ import {
 import {
   APP_TIME_ZONE,
   APPLICATIONS_WINDOW_HOURS,
+  ATTENDANCE_CLOSE_HOURS_AFTER,
   FEED_RANKING,
   FEED_SOON_HOURS,
   HOUR_MS,
@@ -79,15 +95,23 @@ export const publicLobbyColumns = {
   cancelComment: lobbies.cancelComment,
 } as const;
 
+/**
+ * An outer column inside a correlated subquery. Drizzle leaves columns unqualified in
+ * single-table queries, where `"id"` would resolve to the subquery's own table.
+ */
+function outer(table: AnyPgTable, column: AnyPgColumn) {
+  return sql`${table}.${sql.identifier(column.name)}`;
+}
+
 /** Members taking a slot (approved, attended, no_show). */
 export const approvedCountSql =
-  sql<number>`(select count(*) from ${lobbyMembers} where ${lobbyMembers.lobbyId} = ${lobbies.id} and ${inArray(lobbyMembers.status, [...OCCUPYING_MEMBERSHIP_STATUSES])})`.mapWith(
+  sql<number>`(select count(*) from ${lobbyMembers} where ${lobbyMembers.lobbyId} = ${outer(lobbies, lobbies.id)} and ${inArray(lobbyMembers.status, [...OCCUPYING_MEMBERSHIP_STATUSES])})`.mapWith(
     Number,
   );
 
 /** Pending applications the host sees: shadow-banned applicants are left out. */
 const pendingCountSql =
-  sql<number>`(select count(*) from ${lobbyMembers} inner join ${users} on ${users.id} = ${lobbyMembers.userId} where ${lobbyMembers.lobbyId} = ${lobbies.id} and ${lobbyMembers.status} = 'pending' and not ${users.isShadowBanned})`.mapWith(
+  sql<number>`(select count(*) from ${lobbyMembers} inner join ${users} on ${users.id} = ${lobbyMembers.userId} where ${lobbyMembers.lobbyId} = ${outer(lobbies, lobbies.id)} and ${lobbyMembers.status} = 'pending' and not ${users.isShadowBanned})`.mapWith(
     Number,
   );
 
@@ -544,7 +568,13 @@ export async function loadCreationCounters(
 /** Locks the user's own membership row in the lobby (after the user and lobby locks). */
 export async function lockOwnMembership(tx: DbTransaction, lobbyId: string, userId: string) {
   const [row] = await tx
-    .select({ id: lobbyMembers.id, status: lobbyMembers.status, decidedAt: lobbyMembers.decidedAt })
+    .select({
+      id: lobbyMembers.id,
+      status: lobbyMembers.status,
+      decidedAt: lobbyMembers.decidedAt,
+      chatJoinedAt: lobbyMembers.chatJoinedAt,
+      checkedInAt: lobbyMembers.checkedInAt,
+    })
     .from(lobbyMembers)
     .where(and(eq(lobbyMembers.lobbyId, lobbyId), eq(lobbyMembers.userId, userId)))
     .for('no key update');
@@ -555,7 +585,7 @@ export async function lockOwnMembership(tx: DbTransaction, lobbyId: string, user
  * Whether the host sees this application: a shadow-banned applicant is hidden unless already
  * taking a slot (spec §5.5, Q22). The list and the decisions share it, so neither reveals the ban.
  */
-const visibleToHostSql = sql<boolean>`(${or(
+export const visibleToHostSql = sql<boolean>`(${or(
   not(users.isShadowBanned),
   inArray(lobbyMembers.status, [...OCCUPYING_MEMBERSHIP_STATUSES]),
 )})`;
@@ -569,6 +599,7 @@ export async function lockApplication(tx: DbTransaction, lobbyId: string, applic
   const [row] = await tx
     .select({
       id: lobbyMembers.id,
+      userId: lobbyMembers.userId,
       status: lobbyMembers.status,
       applicantKarma: users.karma,
       visibleToHost: visibleToHostSql,
@@ -580,8 +611,8 @@ export async function lockApplication(tx: DbTransaction, lobbyId: string, applic
   return row ?? null;
 }
 
-const attendedCountSql =
-  sql<number>`(select count(*) from ${karmaEvents} where ${karmaEvents.userId} = ${users.id} and ${karmaEvents.reason} = 'attended')`.mapWith(
+export const attendedCountSql =
+  sql<number>`(select count(*) from ${karmaEvents} where ${karmaEvents.userId} = ${outer(users, users.id)} and ${karmaEvents.reason} = 'attended')`.mapWith(
     Number,
   );
 
@@ -609,3 +640,55 @@ export function applicantsQuery(db: Executor, lobbyId: string) {
 }
 
 export type ApplicantRow = Awaited<ReturnType<typeof applicantsQuery>>[number];
+
+/** The meetup group the bot still serves for the lobby, or null. */
+export async function loadActiveChat(db: Executor, lobbyId: string): Promise<number | null> {
+  const [row] = await db
+    .select({ chatId: lobbies.chatId })
+    .from(lobbies)
+    .where(and(eq(lobbies.id, lobbyId), isNotNull(lobbies.chatId), isNull(lobbies.chatClosedAt)));
+  return row?.chatId ?? null;
+}
+
+/**
+ * Role-dependent detail data: the group, attendance progress and the viewer's check-in. Read
+ * only for the host and members; the mapper decides what each of them gets.
+ */
+export async function loadDetailExtras(db: Executor, lobbyId: string, viewerId: string) {
+  const [row] = await db
+    .select({
+      chatId: lobbies.chatId,
+      chatTitle: lobbies.chatTitle,
+      chatInviteLink: lobbies.chatInviteLink,
+      chatClosedAt: lobbies.chatClosedAt,
+      attendanceSavedAt: lobbies.attendanceSavedAt,
+      attendanceClosedAt: lobbies.attendanceClosedAt,
+      checkedInAt: viewerMember.checkedInAt,
+    })
+    .from(lobbies)
+    .leftJoin(viewerMember, and(eq(viewerMember.lobbyId, lobbies.id), eq(viewerMember.userId, viewerId)))
+    .where(eq(lobbies.id, lobbyId));
+  return row ?? null;
+}
+
+export type DetailExtrasRow = NonNullable<Awaited<ReturnType<typeof loadDetailExtras>>>;
+
+/** Hosted lobbies that ended and still wait for the host's attendance marks. */
+export async function loadAttendanceDue(db: Executor, hostId: string, now: Date): Promise<string[]> {
+  const rows = await db
+    .select({ id: lobbies.id })
+    .from(lobbies)
+    .where(
+      and(
+        eq(lobbies.hostId, hostId),
+        ne(lobbies.status, 'cancelled'),
+        lte(lobbies.endsAt, now),
+        gt(lobbies.endsAt, new Date(now.getTime() - ATTENDANCE_CLOSE_HOURS_AFTER * HOUR_MS)),
+        isNull(lobbies.attendanceSavedAt),
+        isNull(lobbies.attendanceClosedAt),
+        sql`${approvedCountSql} > 0`,
+      ),
+    )
+    .orderBy(asc(lobbies.endsAt), asc(lobbies.id));
+  return rows.map((r) => r.id);
+}

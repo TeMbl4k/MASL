@@ -29,6 +29,13 @@
       "when": 1792294790135,
       "tag": "0003_application_events",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792319889038,
+      "tag": "0004_bot_and_chats",
+      "breakpoints": true
     }
   ]
 }

@@ -6,7 +6,7 @@
 <div
   role="status"
   aria-live="polite"
-  class="pointer-events-none fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-2 px-4 pt-[max(env(safe-area-inset-top,0px),0.75rem)]"
+  class="pointer-events-none fixed inset-x-0 top-0 z-50 flex flex-col items-center gap-2 px-4 pt-[max(var(--safe-top),0.75rem)]"
 >
   {#each toast.items as item (item.id)}
     <button

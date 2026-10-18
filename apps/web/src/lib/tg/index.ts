@@ -31,7 +31,7 @@ export async function mountTelegramUi(): Promise<void> {
   setMiniAppBottomBarColor.ifAvailable(TG_INK);
   setMainButtonParams.ifAvailable({ isVisible: false, backgroundColor: TG_BRAND, textColor: TG_PAPER });
 
-  // Full-height screens use --tg-viewport-stable-height when it is bound, 100dvh otherwise.
+  // Binds --tg-viewport-* for layout.css: the safe-area insets of the fullscreen mode.
   try {
     const [called, promise] = mountViewport.ifAvailable({ timeout: VIEWPORT_MOUNT_TIMEOUT_MS });
     if (called) await promise;

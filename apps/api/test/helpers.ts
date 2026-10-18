@@ -1,12 +1,14 @@
 import 'reflect-metadata';
 import { and, eq, sql } from 'drizzle-orm';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { Bot } from 'grammy';
 import {
   applicationEvents,
   createDb,
   karmaEvents,
   lobbies,
   lobbyMembers,
+  notifications,
   users,
   type Database,
   type DbHandle,
@@ -26,9 +28,12 @@ import {
 } from '@masl/shared';
 import { nearestStation, placeHint, type LatLng } from '@masl/shared/metro';
 import { createApp } from '../src/app.factory.js';
+import { BOT } from '../src/bot/bot.provider.js';
+import { OutboxService } from '../src/bot/outbox.service.js';
 import { loadEnv } from '../src/config/env.js';
 import { KarmaService } from '../src/karma/karma.service.js';
 import { FixedWindowStore } from '../src/rate-limit/fixed-window.store.js';
+import { FakeTelegram } from './fake-telegram.js';
 import { signInitData } from './init-data.helper.js';
 
 export const adminUrl = process.env.TEST_DATABASE_URL;
@@ -99,6 +104,12 @@ export interface TestApp {
   /** Direct access for fixtures and state changes. */
   db: Database;
   close: () => Promise<void>;
+  /** The Bot API every test talks to instead of Telegram. */
+  telegram: FakeTelegram;
+  /** Sends what the outbox has due now. */
+  flushOutbox: () => Promise<number>;
+  /** Feeds an update to the bot as long polling would. */
+  handleUpdate: (update: Parameters<FakeTelegram['update']>[0]) => Promise<void>;
   /** Forgets every rate-limit window; call in beforeEach. */
   resetRateLimits: () => void;
   login: (telegramId?: number, firstName?: string) => Promise<AuthResponse>;
@@ -113,6 +124,7 @@ export async function bootApp(options: BootOptions = {}): Promise<TestApp> {
   const testDb: TestDatabase = await createTestDatabase(adminUrl!);
   let app: NestFastifyApplication | undefined;
   let handle: DbHandle | undefined;
+  const telegram = new FakeTelegram();
   try {
     const env = loadEnv({
       NODE_ENV: 'test',
@@ -122,6 +134,7 @@ export async function bootApp(options: BootOptions = {}): Promise<TestApp> {
       ...options.env,
     });
     app = await createApp(env, { logger: false });
+    telegram.install(app.get(BOT));
     options.beforeInit?.(app);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
@@ -166,6 +179,9 @@ export async function bootApp(options: BootOptions = {}): Promise<TestApp> {
       await handle.close();
       await testDb.drop();
     },
+    telegram,
+    flushOutbox: () => ready.get(OutboxService).flush(),
+    handleUpdate: (update) => ready.get<Bot>(BOT).handleUpdate(telegram.update(update)),
     resetRateLimits: () => ready.get(FixedWindowStore).clear(),
     login,
     onboard,
@@ -386,3 +402,63 @@ export function assertNoExactPlace(body: unknown, where = 'response'): void {
   };
   visit(body, '$');
 }
+
+/** Lobby endpoints as a user calls them; raw responses. */
+export function lobbyApi(t: TestApp) {
+  const call = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, token: string, payload?: object) =>
+    t.app.inject({
+      method,
+      url,
+      headers: authHeader(token),
+      payload: method === 'GET' ? undefined : (payload ?? {}),
+    });
+  return {
+    detail: (token: string, id: string) => call('GET', `/api/lobbies/${id}`, token),
+    apply: (token: string, id: string) => call('POST', `/api/lobbies/${id}/applications`, token),
+    cancelOwn: (token: string, id: string) => call('DELETE', `/api/lobbies/${id}/applications/me`, token),
+    applications: (token: string, id: string) => call('GET', `/api/lobbies/${id}/applications`, token),
+    decide: (token: string, id: string, applicationId: string, decision: 'approve' | 'reject') =>
+      call('POST', `/api/lobbies/${id}/applications/${applicationId}/${decision}`, token),
+    cancel: (token: string, id: string, payload: object = { reason: 'plans_changed', comment: null }) =>
+      call('POST', `/api/lobbies/${id}/cancel`, token, payload),
+    prepareChat: (token: string, id: string, payload: object = {}) =>
+      call('POST', `/api/lobbies/${id}/chat/prepare`, token, payload),
+    checkIn: (token: string, id: string, point: object) =>
+      call('POST', `/api/lobbies/${id}/check-in`, token, point),
+    attendance: (token: string, id: string) => call('GET', `/api/lobbies/${id}/attendance`, token),
+    saveAttendance: (token: string, id: string, absentApplicationIds: string[]) =>
+      call('PUT', `/api/lobbies/${id}/attendance`, token, { absentApplicationIds }),
+  };
+}
+
+/** Lets every pending outbox row go out now (skips the debounce delay). */
+export async function makeOutboxDue(db: Database) {
+  await db
+    .update(notifications)
+    .set({ sendAfter: new Date() })
+    .where(sql`${notifications.sentAt} is null`);
+}
+
+/** The application id of a user in a lobby. */
+export async function applicationIdOf(db: Database, lobbyId: string, userId: string): Promise<string> {
+  const [row] = await db
+    .select({ id: lobbyMembers.id })
+    .from(lobbyMembers)
+    .where(and(eq(lobbyMembers.lobbyId, lobbyId), eq(lobbyMembers.userId, userId)));
+  if (!row) throw new Error('no application');
+  return row.id;
+}
+
+/** Links a meetup group to a lobby directly, as the chat flow would. */
+export async function linkChat(db: Database, lobbyId: string, chatId: number) {
+  const inviteLink = `https://t.me/+linked${Math.abs(chatId)}`;
+  await db
+    .update(lobbies)
+    .set({ chatId, chatTitle: 'Чат встречи', chatInviteLink: inviteLink, chatLinkedAt: new Date() })
+    .where(eq(lobbies.id, lobbyId));
+  return inviteLink;
+}
+
+let chatIdSeq = 0;
+/** A group id no other lobby of this test process has. */
+export const freshChatId = () => -1_000_000_000_000 - process.pid * 1000 - ++chatIdSeq;

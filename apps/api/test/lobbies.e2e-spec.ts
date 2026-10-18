@@ -9,6 +9,7 @@ import {
   MAP_LOBBIES_MAX,
   creationContextDto,
   feedResponse,
+  cancelLobbyResponse,
   lobbyDetailDto,
   mapResponse,
   myLobbiesResponse,
@@ -775,6 +776,7 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
         hosting: { upcoming: [], past: [] },
         joined: { upcoming: [], past: [] },
         counts: { hosted: 0, joined: 0 },
+        attendanceDue: [],
       });
       const own = await mine(a.token);
       expect(idsOf(own.hosting.upcoming)).toEqual([hosted.id]);
@@ -811,7 +813,7 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
       const member = await t.loginOnboarded();
       const applicant = await t.loginOnboarded();
       const viewer = await t.loginOnboarded();
-      // Within an hour of the start: still no karma in Stage 2.
+      // Within an hour of the start, but not every slot is taken: no penalty.
       const lobby = await insertLobby(t.db, { hostId: host.user.id, startsInMin: 40, category: 'music' });
       await setMembership(t.db, lobby.id, member.user.id, 'approved');
       await setMembership(t.db, lobby.id, applicant.user.id, 'pending');
@@ -821,7 +823,8 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
       const response = await cancel(host.token, lobby.id);
       expect(response.statusCode).toBe(200);
       expect(response.headers['cache-control']).toBe('private, no-store');
-      const body = lobbyDetailDto.parse(response.json());
+      const { lobby: body, karmaDelta } = cancelLobbyResponse.parse(response.json());
+      expect(karmaDelta).toBe(0);
       expect(body).toMatchObject({
         status: 'cancelled',
         cancelReason: 'plans_changed',
@@ -858,7 +861,10 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
       // A repeat is idempotent and keeps the first reason.
       const repeat = await cancel(host.token, lobby.id, { reason: 'other' });
       expect(repeat.statusCode).toBe(200);
-      expect(repeat.json()).toMatchObject({ status: 'cancelled', cancelReason: 'plans_changed' });
+      expect(repeat.json()).toMatchObject({
+        lobby: { status: 'cancelled', cancelReason: 'plans_changed' },
+        karmaDelta: 0,
+      });
     });
 
     it('the comment is optional; 400 for an unknown reason or a long comment', async () => {
@@ -868,7 +874,9 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
         expect((await cancel(host.token, lobby.id, payload)).statusCode, JSON.stringify(payload)).toBe(400);
       }
       const response = await cancel(host.token, lobby.id, { reason: 'not_enough_people', comment: '  ' });
-      expect(response.json()).toMatchObject({ cancelReason: 'not_enough_people', cancelComment: null });
+      expect(response.json()).toMatchObject({
+        lobby: { cancelReason: 'not_enough_people', cancelComment: null },
+      });
     });
 
     it('409 after the start; 403 for a non-host; 404 for a hidden or missing lobby (T-IDOR-3)', async () => {

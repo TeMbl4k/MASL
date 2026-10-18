@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@masl/shared": "workspace:*",
+    "@telegram-apps/bridge": "^2.11.0",
     "@telegram-apps/sdk": "^3.11.8",
     "maplibre-gl": "6.11.2"
   },

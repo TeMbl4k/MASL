@@ -9,7 +9,7 @@
   import { placesToGeoJson, type MapPlace } from './group-places.js';
   import { loadMaplibre } from './maplibre.js';
   import MapPlaceholder from './MapPlaceholder.svelte';
-  import { attachStyleFallback, baseMapOptions } from './style.js';
+  import { attachStyleFallback, baseMapOptions, foldAttribution } from './style.js';
 
   interface Props {
     places: MapPlace[];
@@ -124,6 +124,7 @@
           zoom,
         });
         attachStyleFallback(instance, onfail);
+        foldAttribution(instance);
         instance.on('style.load', () => {
           layersReady = false;
           if (instance) addLayers(instance);

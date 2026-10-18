@@ -35,6 +35,10 @@ const detail: LobbyDetailDto = lobbyDetailDto.parse({
   cancelReason: null,
   cancelComment: null,
   members: [{ firstName: 'Борис', photoUrl: null, karma: 50 }],
+  chat: null,
+  cancelPolicy: null,
+  checkIn: null,
+  attendance: null,
   access: 'member',
   exactPlace: { address: 'Ленинградский проспект, 36', point: { lat: 55.7901, lng: 37.5601 } },
 });

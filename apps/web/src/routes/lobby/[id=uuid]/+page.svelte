@@ -2,6 +2,7 @@
   import {
     APPLICATIONS_PENDING_MAX,
     effectiveLobbyStatus,
+    formatMoscowTime,
     isLateCancel,
     KARMA,
     LATE_CANCEL_WINDOW_HOURS,
@@ -16,6 +17,7 @@
   import Avatar from '#lib/components/Avatar.svelte';
   import BottomAction from '#lib/components/BottomAction.svelte';
   import CancelLobbySheet from '#lib/components/CancelLobbySheet.svelte';
+  import CheckInCard from '#lib/components/CheckInCard.svelte';
   import ErrorState from '#lib/components/ErrorState.svelte';
   import ExactPlaceBlock from '#lib/components/ExactPlaceBlock.svelte';
   import Alert from '#lib/components/icons/Alert.svelte';
@@ -25,10 +27,12 @@
   import Lock from '#lib/components/icons/Lock.svelte';
   import Star from '#lib/components/icons/Star.svelte';
   import LobbyFacts from '#lib/components/LobbyFacts.svelte';
+  import MeetupChatCard from '#lib/components/MeetupChatCard.svelte';
   import MemberList from '#lib/components/MemberList.svelte';
   import PageHeader from '#lib/components/PageHeader.svelte';
   import StatusPill from '#lib/components/StatusPill.svelte';
   import { describeError, isAbort } from '#lib/errors.js';
+  import { formatShortDate } from '#lib/format/datetime.js';
   import { LOBBY_CANCEL_REASON_LABELS } from '#lib/format/labels.js';
   import { session } from '#lib/session.svelte.js';
   import { appActivity, clock, usePolling } from '#lib/stores/clock.svelte.js';
@@ -40,6 +44,7 @@
   import { haptic } from '#lib/tg/haptics.js';
   import { confirm } from '#lib/tg/popup.js';
   import { usePrimaryAction } from '#lib/tg/primary-action.svelte.js';
+  import { askWriteAccess } from '#lib/tg/write-access.js';
 
   /** A pending applicant's page polls for the host's answer this often. */
   const PENDING_POLL_MS = 30_000;
@@ -52,6 +57,9 @@
   const lobby = $derived<LobbyCardDto | undefined>(detail ?? entry?.card);
   const status = $derived<LobbyStatus | null>(lobby ? effectiveLobbyStatus(lobby, clock.now) : null);
   const viewerKarma = $derived(session.state.status === 'ready' ? session.state.user.karma : null);
+  const botCanWrite = $derived(session.state.status === 'ready' ? session.state.user.botCanWrite : true);
+  /** The host marks who came after the end, until the deadline. */
+  const attendanceOpen = $derived(detail?.attendance?.state === 'open');
 
   let descriptionEl = $state<HTMLElement | null>(null);
   let expanded = $state(false);
@@ -159,6 +167,8 @@
       await lobbyCache.apply(id);
       haptic.success();
       toast.show('Заявка отправлена. Ответ хоста появится здесь и в «Моих событиях»', 'success', 5000);
+      // The bot brings the answer and the exact address; asking doesn't hold the apply up.
+      void askWriteAccess();
     } catch (error) {
       toast.error(error);
       void load();
@@ -212,6 +222,9 @@
     const pending = lobby?.pendingCount ?? 0;
     switch (situation) {
       case 'host':
+        if (attendanceOpen) {
+          return { text: 'Отметить, кто пришёл', onClick: () => void goto(`/lobby/${id}/attendance`) };
+        }
         return {
           text: pending > 0 ? `Управлять заявками (${pending})` : 'Управлять заявками',
           onClick: () => void goto(`/lobby/${id}/manage`),
@@ -284,7 +297,7 @@
   </div>
 {/snippet}
 
-<main class="bg-brand-glow min-h-dvh pb-8">
+<main class="bg-brand-glow min-h-app pb-8">
   {#if notFound}
     <PageHeader title="Встреча не найдена" />
     <div class="flex flex-col items-start gap-4 px-5 pt-4">
@@ -336,6 +349,26 @@
         </div>
       {:else if situation === 'member'}
         {@render notice('brand', 'Вы участник', 'Заявка одобрена. Ждём вас!')}
+        {#if detail?.checkIn}
+          <CheckInCard lobbyId={lobby.id} checkIn={detail.checkIn} />
+        {/if}
+        {#if !botCanWrite}
+          <div
+            class="flex flex-col gap-3 rounded-[1.125rem] border border-sand/50 bg-sand/10 p-3.5"
+            role="status"
+          >
+            <span class="text-sm leading-relaxed">
+              Адрес и новости встречи — только здесь: бот не может вам писать.
+            </span>
+            <button
+              type="button"
+              class="min-h-11 self-start rounded-xl bg-gray-dark px-4 text-paper"
+              onclick={() => void askWriteAccess(true)}
+            >
+              Разрешить боту писать
+            </button>
+          </div>
+        {/if}
       {:else if situation === 'pending'}
         {@render notice('pending', 'Ожидает подтверждения', 'Ждём ответа хоста')}
       {:else if situation === 'pending_started'}
@@ -414,6 +447,32 @@
           </div>
         {/if}
 
+        {#if detail.chat}
+          <MeetupChatCard lobbyId={lobby.id} chat={detail.chat} isHost={lobby.viewer.isHost} />
+        {/if}
+
+        {#if detail.attendance}
+          {@const attendance = detail.attendance}
+          <a
+            href="/lobby/{lobby.id}/attendance"
+            class="flex min-h-12 items-center justify-between gap-3 rounded-[1.125rem] border border-gray-dark bg-gray-dark/40 px-4 py-3"
+          >
+            <span class="flex flex-col gap-0.5">
+              <span class="font-semibold">Кто пришёл</span>
+              <span class="text-[0.8125rem] text-gray-light">
+                {attendance.state === 'open'
+                  ? `Отметьте до ${formatShortDate(attendance.deadline)}, ${formatMoscowTime(attendance.deadline)}`
+                  : attendance.state === 'saved'
+                    ? 'Отмечено, карма начислена'
+                    : attendance.state === 'closed'
+                      ? 'Время отметить вышло'
+                      : 'Откроется после окончания'}
+              </span>
+            </span>
+            <ChevronRight size={20} class="text-gray-light" />
+          </a>
+        {/if}
+
         {#if situation === 'host'}
           <a
             href="/lobby/{lobby.id}/manage"
@@ -440,7 +499,7 @@
             `Позже чем за ${LATE_CANCEL_WINDOW_HOURS} часа до начала карма снизится на ${LATE_CANCEL_PENALTY}`,
           )}
         {:else if situation === 'host' && status === 'open'}
-          <div class="flex justify-center pt-2">
+          <div class="flex flex-col items-center gap-1.5 pt-2">
             <button
               type="button"
               class="min-h-11 rounded-[0.875rem] border border-brand-deep/70 px-5 text-[0.9375rem] text-brand-light"
@@ -448,6 +507,11 @@
             >
               Отменить встречу
             </button>
+            {#if detail.cancelPolicy}
+              <span class="text-center text-xs text-gray-light">
+                Без штрафа до {formatMoscowTime(detail.cancelPolicy.lateFrom)} или если места не заполнены
+              </span>
+            {/if}
           </div>
         {/if}
       {:else if loadError}
