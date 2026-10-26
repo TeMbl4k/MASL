@@ -1,7 +1,7 @@
 <script lang="ts">
   // Filled in by the owner before the test starts (todo.md).
-  const OPERATOR = '[ИМЯ ВЛАДЕЛЬЦА]';
-  const CONTACT = '[КОНТАКТ: @username в Telegram или почта]';
+  const OPERATOR = 'Галкин Артём Геннадьевич';
+  const CONTACT = '@Tembl4ka';
 
   interface Section {
     title: string;
