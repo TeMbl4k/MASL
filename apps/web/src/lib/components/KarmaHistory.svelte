@@ -72,6 +72,11 @@
                   >· <span class="underline underline-offset-2">{item.lobby.title}</span></span
                 >
               {/if}
+              {#if item.comment}
+                <span class="mt-0.5 block break-words whitespace-pre-line text-gray-light"
+                  >{item.comment}</span
+                >
+              {/if}
             </span>
             <span class="shrink-0 text-gray-light">{formatShortDate(item.createdAt)}</span>
           </svelte:element>

@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { CREATION_BLOCKED_TITLE, type CreationContextDto } from '@masl/shared';
+  import type { CreationContextDto } from '@masl/shared';
   import { onMount } from 'svelte';
   import { api } from '#lib/api.js';
   import Avatar from '#lib/components/Avatar.svelte';
-  import Alert from '#lib/components/icons/Alert.svelte';
+  import CreationBlockCard from '#lib/components/CreationBlockCard.svelte';
+  import ChevronRight from '#lib/components/icons/ChevronRight.svelte';
   import InterestsSheet from '#lib/components/InterestsSheet.svelte';
   import KarmaCard from '#lib/components/KarmaCard.svelte';
   import KarmaHistory from '#lib/components/KarmaHistory.svelte';
@@ -60,13 +61,25 @@
       </header>
 
       {#if creation?.reason === 'blocked'}
-        <p
-          class="flex items-center gap-2 rounded-2xl border border-brand-light/60 bg-brand-deep/10 px-4 py-3 text-sm"
-          role="status"
+        <CreationBlockCard />
+      {/if}
+
+      {#if user.role !== 'user'}
+        <a
+          href="/admin"
+          class="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-gray-dark bg-gray-dark/40 px-4"
         >
-          <Alert size={18} class="shrink-0 text-brand-light" />
-          {CREATION_BLOCKED_TITLE}
-        </p>
+          <span class="font-semibold">Модерация</span>
+          <span class="flex items-center gap-2">
+            {#if user.moderationQueue}
+              <span
+                class="rounded-full bg-brand px-2.5 py-0.5 text-sm font-bold"
+                aria-label="Открытых дел: {user.moderationQueue}">{user.moderationQueue}</span
+              >
+            {/if}
+            <ChevronRight size={20} class="text-gray-light" />
+          </span>
+        </a>
       {/if}
 
       <KarmaCard karma={user.karma} />

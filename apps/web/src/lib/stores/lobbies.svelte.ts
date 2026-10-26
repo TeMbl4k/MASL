@@ -5,6 +5,7 @@ import type {
   CancelLobbyResponse,
   LobbyCardDto,
   LobbyDetailDto,
+  ReportInput,
 } from '@masl/shared';
 import { SvelteMap } from 'svelte/reactivity';
 import { api, ApiError } from '../api.js';
@@ -106,6 +107,21 @@ class LobbyCache {
       this.#store(response.lobby);
       if (response.karmaDelta !== 0) void this.#refreshUser();
       return response;
+    });
+  }
+
+  /**
+   * «Пожаловаться». The lobby then disappears for the viewer unless they are a pending or
+   * approved member, so the detail is reloaded: a 404 drops it from the cache.
+   */
+  report(id: string, input: ReportInput): Promise<void> {
+    return this.#mutate(id, async () => {
+      await session.authorized((token) => api.report(token, id, input));
+      try {
+        await this.load(id);
+      } catch {
+        // Hidden now (404) or offline: either way the page leaves it.
+      }
     });
   }
 

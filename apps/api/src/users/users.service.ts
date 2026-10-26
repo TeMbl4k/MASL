@@ -1,18 +1,22 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { asc, eq, sql, type SQLWrapper } from 'drizzle-orm';
 import { userInterests, users, type Database, type User } from '@masl/db';
-import type { MeDto, OnboardingInput, UpdateInterestsInput } from '@masl/shared';
+import type { MeDto, OnboardingInput, UpdateInterestsInput, UserRole } from '@masl/shared';
 import type { TelegramIdentity } from '../auth/init-data.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
+import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
 import type { DbTransaction } from '../karma/karma.service.js';
+import { countOpenCases } from '../moderation/admin-queries.js';
+import { userRole } from '../moderation/roles.js';
 
 @Injectable()
 export class UsersService {
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   /**
@@ -60,7 +64,9 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Пользователь не найден');
     }
-    return this.toMeDto(user, await this.interestsOf(userId));
+    const role = userRole(user, this.env.ADMIN_TELEGRAM_IDS);
+    const queue = role === 'user' ? null : await countOpenCases(this.db);
+    return this.toMeDto(user, await this.interestsOf(userId), role, queue);
   }
 
   /**
@@ -109,7 +115,13 @@ export class UsersService {
     return this.getMe(userId);
   }
 
-  toMeDto(user: User, interestSlugs: string[], now: Date = new Date()): MeDto {
+  toMeDto(
+    user: User,
+    interestSlugs: string[],
+    role: UserRole,
+    moderationQueue: number | null,
+    now: Date = new Date(),
+  ): MeDto {
     return {
       id: user.id,
       telegramId: user.telegramId,
@@ -123,6 +135,8 @@ export class UsersService {
       interests: interestSlugs,
       onboarded: user.onboardedAt !== null,
       botCanWrite: user.allowsWriteToPm,
+      role,
+      moderationQueue,
     };
   }
 

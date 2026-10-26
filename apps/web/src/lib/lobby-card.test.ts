@@ -30,7 +30,7 @@ const detail: LobbyDetailDto = lobbyDetailDto.parse({
   },
   distanceM: 2400,
   host: { firstName: 'Анна', photoUrl: null, karma: 50 },
-  viewer: { isHost: false, membershipStatus: 'approved', applyBlock: null },
+  viewer: { isHost: false, membershipStatus: 'approved', applyBlock: null, reported: false },
   description: 'Корт забронирован',
   cancelReason: null,
   cancelComment: null,

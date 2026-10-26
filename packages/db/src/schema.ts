@@ -16,8 +16,11 @@ import {
   uniqueIndex,
   uuid,
   varchar,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import {
+  CASE_DECISIONS,
+  CREATION_BLOCK_KINDS,
   FEEDBACK_RATINGS,
   GENDERS,
   KARMA,
@@ -31,8 +34,16 @@ import {
   LOBBY_STATUSES,
   LOBBY_TITLE_MAX,
   MEMBERSHIP_STATUSES,
+  MODERATION_ACTIONS,
+  MODERATION_CASE_KINDS,
+  MODERATION_COMMENT_MAX,
+  MODERATION_DECISIONS,
   PAYMENT_FORMATS,
+  REPORT_COMMENT_MAX,
+  REPORT_REASONS,
+  APPEAL_TEXT_MAX,
   type NotificationKind,
+  type ReportNotCounted,
 } from '@masl/shared';
 import { geographyPoint } from './geo.js';
 
@@ -43,6 +54,15 @@ export const paymentFormatEnum = pgEnum('payment_format', PAYMENT_FORMATS);
 export const membershipStatusEnum = pgEnum('membership_status', MEMBERSHIP_STATUSES);
 export const karmaReasonEnum = pgEnum('karma_reason', KARMA_REASONS);
 export const feedbackRatingEnum = pgEnum('feedback_rating', FEEDBACK_RATINGS);
+export const reportReasonEnum = pgEnum('report_reason', REPORT_REASONS);
+export const creationBlockKindEnum = pgEnum('creation_block_kind', CREATION_BLOCK_KINDS);
+export const moderationCaseKindEnum = pgEnum('moderation_case_kind', MODERATION_CASE_KINDS);
+export const moderationDecisionEnum = pgEnum('moderation_decision', MODERATION_DECISIONS);
+export const moderationActionEnum = pgEnum('moderation_action', MODERATION_ACTIONS);
+
+/** `decision in ('a','b')` for the decisions of one case kind. */
+const decisionsOf = (kind: keyof typeof CASE_DECISIONS) =>
+  sql.raw(CASE_DECISIONS[kind].map((d) => `'${d}'`).join(','));
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -74,13 +94,27 @@ export const users = pgTable(
     karma: integer('karma').notNull().default(KARMA.START),
     /** Shadow ban pending moderator review (after 3 reports). */
     isShadowBanned: boolean('is_shadow_banned').notNull().default(false),
-    /** Lobby creation blocked after a host flake; lifted on appeal. */
+    /** Lobby creation blocked after a host flake or by a moderator; lifted on appeal. */
     lobbyCreationBlocked: boolean('lobby_creation_blocked').notNull().default(false),
+    /** Why creation is blocked, when and over which lobby (null for a block without one). */
+    creationBlockedReason: creationBlockKindEnum('creation_blocked_reason'),
+    creationBlockedAt: timestamp('creation_blocked_at', { withTimezone: true }),
+    creationBlockedLobbyId: uuid('creation_blocked_lobby_id').references((): AnyPgColumn => lobbies.id, {
+      onDelete: 'set null',
+    }),
+    /** Appointed by an admin; admins themselves come from ADMIN_TELEGRAM_IDS. */
+    isModerator: boolean('is_moderator').notNull().default(false),
     onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
     ...timestamps,
   },
-  (t) => [uniqueIndex('users_telegram_id_uq').on(t.telegramId)],
+  (t) => [
+    uniqueIndex('users_telegram_id_uq').on(t.telegramId),
+    check(
+      'users_creation_block_chk',
+      sql`${t.lobbyCreationBlocked} = (${t.creationBlockedReason} is not null) and (${t.creationBlockedReason} is null) = (${t.creationBlockedAt} is null)`,
+    ),
+  ],
 );
 
 export const interests = pgTable('interests', {
@@ -286,10 +320,10 @@ export const notifications = pgTable(
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
     /** Group target. */
     chatId: bigint('chat_id', { mode: 'number' }),
-    lobbyId: uuid('lobby_id')
-      .notNull()
-      .references(() => lobbies.id, { onDelete: 'cascade' }),
+    lobbyId: uuid('lobby_id').references(() => lobbies.id, { onDelete: 'cascade' }),
     memberId: uuid('member_id').references(() => lobbyMembers.id, { onDelete: 'cascade' }),
+    /** Moderation messages are about a case, not a lobby. */
+    caseId: uuid('case_id').references(() => moderationCases.id, { onDelete: 'cascade' }),
     kind: varchar('kind', { length: 40 }).$type<NotificationKind>().notNull(),
     /** At most one pending row per key (debounce). */
     dedupeKey: varchar('dedupe_key', { length: 120 }),
@@ -310,6 +344,7 @@ export const notifications = pgTable(
       .where(sql`${t.sentAt} is null and ${t.failedAt} is null`),
     index('notifications_lobby_kind_idx').on(t.lobbyId, t.kind),
     check('notifications_target_chk', sql`(${t.userId} is null) <> (${t.chatId} is null)`),
+    check('notifications_subject_chk', sql`${t.lobbyId} is not null or ${t.caseId} is not null`),
   ],
 );
 
@@ -329,6 +364,101 @@ export const lobbyFeedback = pgTable(
   (t) => [primaryKey({ columns: [t.lobbyId, t.userId] })],
 );
 
+/**
+ * A matter for moderators: reports on a host (one open case per host), a «Не состоялась»
+ * answer (one open case per lobby) or an appeal against a creation block (one open per user).
+ */
+export const moderationCases = pgTable(
+  'moderation_cases',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    kind: moderationCaseKindEnum('kind').notNull(),
+    /** Whom the case is about: the reported host, the host of the lobby, the appellant. */
+    subjectId: uuid('subject_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** not_held: the lobby; appeal: the lobby behind the block; reports: none (see reports). */
+    lobbyId: uuid('lobby_id').references(() => lobbies.id, { onDelete: 'set null' }),
+    appealText: varchar('appeal_text', { length: APPEAL_TEXT_MAX }),
+    /** reports: when the independent reports reached the threshold. */
+    shadowBannedAt: timestamp('shadow_banned_at', { withTimezone: true }),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    resolvedBy: uuid('resolved_by').references(() => users.id, { onDelete: 'set null' }),
+    decision: moderationDecisionEnum('decision'),
+    decisionComment: varchar('decision_comment', { length: MODERATION_COMMENT_MAX }),
+  },
+  (t) => [
+    uniqueIndex('moderation_cases_open_subject_uq')
+      .on(t.kind, t.subjectId)
+      .where(sql`${t.resolvedAt} is null and ${t.kind} <> 'not_held'`),
+    uniqueIndex('moderation_cases_open_lobby_uq')
+      .on(t.lobbyId)
+      .where(sql`${t.resolvedAt} is null and ${t.kind} = 'not_held'`),
+    index('moderation_cases_queue_idx')
+      .on(t.openedAt)
+      .where(sql`${t.resolvedAt} is null`),
+    index('moderation_cases_subject_idx').on(t.subjectId, t.openedAt),
+    check('moderation_cases_resolved_chk', sql`(${t.resolvedAt} is null) = (${t.decision} is null)`),
+    check('moderation_cases_appeal_chk', sql`(${t.kind} = 'appeal') = (${t.appealText} is not null)`),
+    check(
+      'moderation_cases_decision_chk',
+      sql`${t.decision} is null or (${t.kind} = 'reports' and ${t.decision} in (${decisionsOf('reports')})) or (${t.kind} = 'not_held' and ${t.decision} in (${decisionsOf('not_held')})) or (${t.kind} = 'appeal' and ${t.decision} in (${decisionsOf('appeal')}))`,
+    ),
+  ],
+);
+
+/** One report per reporter and lobby; it joins the subject's open reports case. */
+export const reports = pgTable(
+  'reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reporterId: uuid('reporter_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lobbyId: uuid('lobby_id')
+      .notNull()
+      .references(() => lobbies.id, { onDelete: 'cascade' }),
+    /** The lobby's host when reported. */
+    subjectId: uuid('subject_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => moderationCases.id, { onDelete: 'cascade' }),
+    reason: reportReasonEnum('reason').notNull(),
+    comment: varchar('comment', { length: REPORT_COMMENT_MAX }),
+    /** Why the report doesn't count toward the shadow ban, decided when it was sent; null counts. */
+    notCounted: varchar('not_counted', { length: 20 }).$type<ReportNotCounted>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('reports_reporter_lobby_uq').on(t.reporterId, t.lobbyId),
+    index('reports_case_idx').on(t.caseId),
+    index('reports_subject_idx').on(t.subjectId),
+    // The daily cap.
+    index('reports_reporter_created_idx').on(t.reporterId, t.createdAt),
+  ],
+);
+
+/** Append-only log of moderation: every moderator action and the automatic shadow ban. */
+export const moderationActions = pgTable(
+  'moderation_actions',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    /** Null: the system. */
+    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    subjectId: uuid('subject_id').references(() => users.id, { onDelete: 'cascade' }),
+    lobbyId: uuid('lobby_id').references(() => lobbies.id, { onDelete: 'set null' }),
+    caseId: uuid('case_id').references(() => moderationCases.id, { onDelete: 'set null' }),
+    action: moderationActionEnum('action').notNull(),
+    karmaDelta: integer('karma_delta'),
+    comment: varchar('comment', { length: MODERATION_COMMENT_MAX }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [index('moderation_actions_subject_idx').on(t.subjectId, t.createdAt)],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Interest = typeof interests.$inferSelect;
@@ -338,3 +468,6 @@ export type LobbyMember = typeof lobbyMembers.$inferSelect;
 export type KarmaEvent = typeof karmaEvents.$inferSelect;
 export type ApplicationEvent = typeof applicationEvents.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type ModerationCase = typeof moderationCases.$inferSelect;
+export type Report = typeof reports.$inferSelect;
+export type ModerationActionRow = typeof moderationActions.$inferSelect;

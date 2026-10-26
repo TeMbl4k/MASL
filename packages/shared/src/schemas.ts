@@ -2,6 +2,8 @@ import { z } from 'zod';
 import {
   AGE_MAX,
   AGE_MIN,
+  APPEAL_TEXT_MAX,
+  APPEAL_TEXT_MIN,
   FEED_PAGE_SIZE,
   FEED_PAGE_SIZE_MAX,
   INTERESTS_MAX,
@@ -18,23 +20,40 @@ import {
   LOBBY_SLOTS_MIN,
   LOBBY_TITLE_MAX,
   LOBBY_TITLE_MIN,
+  MODERATION_COMMENT_MAX,
+  MODERATION_KARMA_DELTA_MAX,
   MOSCOW_BOUNDS,
   PLACE_QUERY_MAX,
   PLACE_QUERY_MIN,
+  REPORT_COMMENT_MAX,
+  USER_SEARCH_MAX,
+  USER_SEARCH_MIN,
 } from './constants.js';
 import {
   API_ERROR_CODES,
+  APPEAL_STATUSES,
   APPLY_BLOCK_REASONS,
   ATTENDANCE_STATES,
   CHAT_STATES,
   CREATE_BLOCK_REASONS,
+  CREATION_BLOCK_KINDS,
+  FEEDBACK_RATINGS,
   GENDERS,
   KARMA_REASONS,
   LOBBY_CANCEL_REASONS,
+  LOBBY_CANCEL_REASONS_OUT,
   LOBBY_CATEGORIES,
   LOBBY_STATUSES,
   MEMBERSHIP_STATUSES,
+  MODERATION_ACTIONS,
+  MODERATION_CASE_KINDS,
+  MODERATION_CASE_STATUSES,
+  MODERATION_DECISIONS,
   PAYMENT_FORMATS,
+  REPORT_NOT_COUNTED,
+  REPORT_REASONS,
+  USER_MODERATION_ACTIONS,
+  USER_ROLES,
 } from './enums.js';
 import { INTERESTS } from './interests.js';
 import { OUTSIDE_MOSCOW_MESSAGE, roundViewerCoord } from './lobby-rules.js';
@@ -92,6 +111,18 @@ const multiLine = (max: number, tooLong?: string) =>
     .string()
     .transform(normalizeMultiLine)
     .pipe(z.string().max(max, tooLong).refine(noMarkFlood, MARK_FLOOD_MESSAGE));
+/** Several lines with a minimum of visible characters. */
+const boundedMultiLine = (min: number, max: number, messages: { tooShort: string; tooLong: string }) =>
+  z
+    .string()
+    .transform(normalizeMultiLine)
+    .pipe(
+      z
+        .string()
+        .refine((value) => visibleLength(value) >= min, messages.tooShort)
+        .max(max, messages.tooLong)
+        .refine(noMarkFlood, MARK_FLOOD_MESSAGE),
+    );
 /** Optional text: missing, null and blank all become null. */
 const optionalText = <T extends z.ZodType<string, string>>(schema: T) =>
   schema.nullish().transform((value) => value || null);
@@ -145,6 +176,9 @@ export const meDto = z.object({
   onboarded: z.boolean(),
   /** The bot may message the user privately (exact address, approvals, attendance). */
   botCanWrite: z.boolean(),
+  role: z.enum(USER_ROLES),
+  /** Open moderation cases; moderators and admins only. */
+  moderationQueue: z.number().int().nullable(),
 });
 export type MeDto = z.infer<typeof meDto>;
 
@@ -323,6 +357,8 @@ export const lobbyViewerDto = z.strictObject({
   membershipStatus: z.enum(MEMBERSHIP_STATUSES).nullable(),
   /** First failing apply check; null when apply is allowed or would be an idempotent repeat. */
   applyBlock: z.enum(APPLY_BLOCK_REASONS).nullable(),
+  /** The viewer reported this lobby. */
+  reported: z.boolean(),
 });
 export type LobbyViewerDto = z.infer<typeof lobbyViewerDto>;
 
@@ -379,7 +415,7 @@ export type AttendanceSummaryDto = z.infer<typeof attendanceSummaryDto>;
 
 const lobbyDetailBase = lobbyCardDto.extend({
   description: z.string().nullable(),
-  cancelReason: z.enum(LOBBY_CANCEL_REASONS).nullable(),
+  cancelReason: z.enum(LOBBY_CANCEL_REASONS_OUT).nullable(),
   cancelComment: z.string().nullable(),
   /** Host, approved and attended members; null for everyone else (they see approvedCount). */
   members: z.array(personDto).nullable(),
@@ -450,6 +486,8 @@ export const creationContextDto = z.strictObject({
   upcomingCount: z.number().int(),
   /** DaData address suggestions are configured. */
   addressSuggest: z.boolean(),
+  /** reason 'blocked': why. */
+  blockKind: z.enum(CREATION_BLOCK_KINDS).nullable(),
 });
 export type CreationContextDto = z.infer<typeof creationContextDto>;
 
@@ -525,6 +563,8 @@ export const karmaEventDto = z.strictObject({
   delta: z.number().int(),
   createdAt: isoOut,
   lobby: z.strictObject({ id: z.uuid(), title: z.string() }).nullable(),
+  /** A moderator's words to the user; `manual` and `moderation` events only. */
+  comment: z.string().nullable(),
 });
 export type KarmaEventDto = z.infer<typeof karmaEventDto>;
 
@@ -550,6 +590,328 @@ export const placeReverseResponse = z.strictObject({
   address: z.string().nullable(),
 });
 export type PlaceReverseResponse = z.infer<typeof placeReverseResponse>;
+
+// Moderation: the user's side
+
+/** POST /lobbies/:id/reports */
+export const reportInput = z.object({
+  reason: z.enum(REPORT_REASONS, { error: 'Выберите причину' }),
+  comment: optionalText(multiLine(REPORT_COMMENT_MAX, `Комментарий — до ${REPORT_COMMENT_MAX} символов`)),
+});
+export type ReportInput = z.infer<typeof reportInput>;
+
+/** POST /lobbies/:id/reports — the same answer on a repeat. */
+export const reportResponse = z.strictObject({ reported: z.literal(true) });
+export type ReportResponse = z.infer<typeof reportResponse>;
+
+/** POST /me/appeals */
+export const appealInput = z.object({
+  text: boundedMultiLine(APPEAL_TEXT_MIN, APPEAL_TEXT_MAX, {
+    tooShort: `Опишите ситуацию: от ${APPEAL_TEXT_MIN} символов`,
+    tooLong: `Апелляция — до ${APPEAL_TEXT_MAX} символов`,
+  }),
+});
+export type AppealInput = z.infer<typeof appealInput>;
+
+const lobbyRef = z.strictObject({ id: z.uuid(), title: z.string() });
+
+/** Why the user can't create lobbies; their own data only. */
+export const creationBlockDto = z.strictObject({
+  kind: z.enum(CREATION_BLOCK_KINDS),
+  since: isoOut,
+  /** The lobby behind the block (a late cancel, a moderator's «сорвал»); null when there is none. */
+  lobby: z.strictObject({ title: z.string(), startsAt: isoOut, cancelledAt: isoOut.nullable() }).nullable(),
+  /** What the cause cost in karma on that lobby; null without one. */
+  karmaDelta: z.number().int().nullable(),
+});
+export type CreationBlockDto = z.infer<typeof creationBlockDto>;
+
+export const appealDto = z.strictObject({
+  status: z.enum(APPEAL_STATUSES),
+  createdAt: isoOut,
+  decidedAt: isoOut.nullable(),
+  /** The moderator's reason; rejections only. */
+  comment: z.string().nullable(),
+});
+export type AppealDto = z.infer<typeof appealDto>;
+
+/** GET /me/appeal and POST /me/appeals */
+export const appealStateDto = z.strictObject({
+  block: creationBlockDto.nullable(),
+  /** The latest appeal, whatever its outcome. */
+  appeal: appealDto.nullable(),
+  /** After a rejection: no new appeal before this moment. */
+  retryAt: isoOut.nullable(),
+  canAppeal: z.boolean(),
+});
+export type AppealStateDto = z.infer<typeof appealStateDto>;
+
+// Moderation: moderators and admins. No exact address or point anywhere below (rule 13).
+
+const userRef = z.strictObject({ id: z.uuid(), firstName: z.string() });
+
+/** A user as moderators see them. */
+export const adminUserDto = z.strictObject({
+  id: z.uuid(),
+  telegramId: z.number().int(),
+  firstName: z.string(),
+  lastName: z.string().nullable(),
+  username: z.string().nullable(),
+  photoUrl: z.string().nullable(),
+  karma: z.number().int(),
+  role: z.enum(USER_ROLES),
+  isShadowBanned: z.boolean(),
+  creationBlock: z.enum(CREATION_BLOCK_KINDS).nullable(),
+  onboarded: z.boolean(),
+  /** Account creation. */
+  joinedAt: isoOut,
+});
+export type AdminUserDto = z.infer<typeof adminUserDto>;
+
+const ratingCounts = z.strictObject({
+  good: z.number().int(),
+  bad: z.number().int(),
+  notHeld: z.number().int(),
+});
+
+export const adminUserStatsDto = z.strictObject({
+  /** Hosted lobbies that are not cancelled. */
+  hosted: z.number().int(),
+  attended: z.number().int(),
+  noShows: z.number().int(),
+  /** A participant's late cancels. */
+  lateCancels: z.number().int(),
+  /** A host's late cancels of a full lobby. */
+  hostLateCancels: z.number().int(),
+  reportsReceived: z.number().int(),
+  /** Members' answers about the meetups the user hosted. */
+  feedback: ratingCounts,
+});
+export type AdminUserStatsDto = z.infer<typeof adminUserStatsDto>;
+
+export const adminReportDto = z.strictObject({
+  id: z.uuid(),
+  createdAt: isoOut,
+  reason: z.enum(REPORT_REASONS),
+  comment: z.string().nullable(),
+  /** Null: the report counts toward the shadow ban. */
+  notCounted: z.enum(REPORT_NOT_COUNTED).nullable(),
+  reporter: z.strictObject({
+    id: z.uuid(),
+    firstName: z.string(),
+    karma: z.number().int(),
+    joinedAt: isoOut,
+  }),
+  lobby: lobbyRef,
+});
+export type AdminReportDto = z.infer<typeof adminReportDto>;
+
+export const adminMemberDto = z.strictObject({
+  user: z.strictObject({ id: z.uuid(), firstName: z.string(), karma: z.number().int() }),
+  status: z.enum(MEMBERSHIP_STATUSES),
+  checkedInAt: isoOut.nullable(),
+  feedback: z.enum(FEEDBACK_RATINGS).nullable(),
+  /** The member's attended/no_show karma on this lobby. */
+  karmaDelta: z.number().int().nullable(),
+});
+export type AdminMemberDto = z.infer<typeof adminMemberDto>;
+
+/** A lobby as moderators see it: the station hint, never the exact place. */
+export const adminLobbyDto = z.strictObject({
+  id: z.uuid(),
+  title: z.string(),
+  description: z.string().nullable(),
+  category: z.enum(LOBBY_CATEGORIES),
+  startsAt: isoOut,
+  endsAt: isoOut,
+  /** Effective status at read time. */
+  status: z.enum(LOBBY_STATUSES),
+  placeHint: z.string(),
+  slots: z.number().int(),
+  approvedCount: z.number().int(),
+  cancelReason: z.enum(LOBBY_CANCEL_REASONS_OUT).nullable(),
+  cancelledAt: isoOut.nullable(),
+  attendanceSavedAt: isoOut.nullable(),
+  /** The host's `hosted` karma for this lobby. */
+  hostedDelta: z.number().int().nullable(),
+  /** Everyone who was approved, with marks and feedback. */
+  members: z.array(adminMemberDto),
+});
+export type AdminLobbyDto = z.infer<typeof adminLobbyDto>;
+
+/** A queue row. */
+export const adminCaseSummaryDto = z.strictObject({
+  id: z.uuid(),
+  kind: z.enum(MODERATION_CASE_KINDS),
+  openedAt: isoOut,
+  subject: z.strictObject({ id: z.uuid(), firstName: z.string(), karma: z.number().int() }),
+  /** Reports: when the automatic shadow ban came. */
+  shadowBannedAt: isoOut.nullable(),
+  /** The case's lobby (not_held), or the latest reported one. */
+  lobby: lobbyRef.nullable(),
+  reports: z
+    .strictObject({
+      total: z.number().int(),
+      counted: z.number().int(),
+      reasons: z.array(z.enum(REPORT_REASONS)),
+    })
+    .nullable(),
+  /** not_held: «Не состоялась» answers on the lobby. */
+  notHeld: z.number().int().nullable(),
+  /** appeal: what the user appeals against. */
+  blockKind: z.enum(CREATION_BLOCK_KINDS).nullable(),
+});
+export type AdminCaseSummaryDto = z.infer<typeof adminCaseSummaryDto>;
+
+/** GET /admin/cases */
+export const adminCasesQuery = z.object({
+  kind: optionalQuery(z.enum(MODERATION_CASE_KINDS)),
+  cursor: optionalQuery(z.string().max(256)),
+});
+export type AdminCasesQuery = z.infer<typeof adminCasesQuery>;
+
+/** GET /admin/cases — shadow-banned report cases first, then the oldest. */
+export const adminCasesResponse = z.strictObject({
+  items: z.array(adminCaseSummaryDto),
+  nextCursor: z.string().nullable(),
+  /** Open cases per kind, whatever the filter. */
+  counts: z.strictObject({
+    all: z.number().int(),
+    reports: z.number().int(),
+    not_held: z.number().int(),
+    appeal: z.number().int(),
+  }),
+});
+export type AdminCasesResponse = z.infer<typeof adminCasesResponse>;
+
+/** GET /admin/cases/:id and the decision's answer. */
+export const adminCaseDto = z.strictObject({
+  id: z.uuid(),
+  kind: z.enum(MODERATION_CASE_KINDS),
+  status: z.enum(MODERATION_CASE_STATUSES),
+  openedAt: isoOut,
+  resolvedAt: isoOut.nullable(),
+  decision: z.enum(MODERATION_DECISIONS).nullable(),
+  decisionComment: z.string().nullable(),
+  resolvedBy: userRef.nullable(),
+  subject: adminUserDto,
+  stats: adminUserStatsDto,
+  shadowBannedAt: isoOut.nullable(),
+  /** Reports of the case, newest first; empty for other kinds. */
+  reports: z.array(adminReportDto),
+  /** not_held: the lobby; appeal: the lobby behind the block; reports: the latest reported. */
+  lobby: adminLobbyDto.nullable(),
+  appealText: z.string().nullable(),
+  /** The subject's current creation block. */
+  block: creationBlockDto.nullable(),
+  /** The subject's open lobbies that have not started: «Отменить предстоящие встречи». */
+  upcomingLobbies: z.number().int(),
+  /** appeal: karma «Вернуть карму» would give back; 0 when nothing. */
+  refund: z.number().int(),
+  /** The viewer is the subject: decisions are refused. */
+  isSelf: z.boolean(),
+});
+export type AdminCaseDto = z.infer<typeof adminCaseDto>;
+
+/** POST /admin/cases/:id/resolve — the decision must fit the case kind (CASE_DECISIONS). */
+export const resolveCaseInput = z
+  .object({
+    decision: z.enum(MODERATION_DECISIONS),
+    comment: optionalText(
+      multiLine(MODERATION_COMMENT_MAX, `Комментарий — до ${MODERATION_COMMENT_MAX} символов`),
+    ),
+    /** reports_confirmed: cancel the subject's upcoming lobbies. */
+    cancelUpcoming: z.boolean().default(true),
+    /** reports_confirmed: also block lobby creation. */
+    blockCreation: z.boolean().default(false),
+    /** appeal_approved: give back the karma the block's cause cost. */
+    refundKarma: z.boolean().default(false),
+  })
+  .refine((input) => input.decision !== 'appeal_rejected' || input.comment !== null, {
+    path: ['comment'],
+    error: 'Напишите причину отказа: её увидит пользователь',
+  });
+export type ResolveCaseInput = z.infer<typeof resolveCaseInput>;
+export type ResolveCaseRequest = z.input<typeof resolveCaseInput>;
+
+/** GET /admin/users — by @username, first or last name prefix, or an exact Telegram id. */
+export const adminUserSearchQuery = z.object({
+  q: singleLine(USER_SEARCH_MIN, USER_SEARCH_MAX, {
+    tooShort: `Введите от ${USER_SEARCH_MIN} символов`,
+    tooLong: `Не больше ${USER_SEARCH_MAX} символов`,
+  }),
+});
+export type AdminUserSearchQuery = z.infer<typeof adminUserSearchQuery>;
+
+export const adminUserSearchResponse = z.strictObject({ items: z.array(adminUserDto) });
+export type AdminUserSearchResponse = z.infer<typeof adminUserSearchResponse>;
+
+/** One entry of the moderation log; `actor` null is the system (automatic shadow ban). */
+export const moderationLogEntryDto = z.strictObject({
+  id: z.number().int(),
+  createdAt: isoOut,
+  action: z.enum(MODERATION_ACTIONS),
+  actor: userRef.nullable(),
+  karmaDelta: z.number().int().nullable(),
+  comment: z.string().nullable(),
+  /** resolve_case: the decision taken. */
+  decision: z.enum(MODERATION_DECISIONS).nullable(),
+  caseId: z.uuid().nullable(),
+  lobby: lobbyRef.nullable(),
+});
+export type ModerationLogEntryDto = z.infer<typeof moderationLogEntryDto>;
+
+/** GET /admin/users/:id and every user action. */
+export const adminUserCardDto = z.strictObject({
+  user: adminUserDto,
+  stats: adminUserStatsDto,
+  block: creationBlockDto.nullable(),
+  openCases: z.array(z.strictObject({ id: z.uuid(), kind: z.enum(MODERATION_CASE_KINDS), openedAt: isoOut })),
+  /** Newest first. */
+  history: z.array(moderationLogEntryDto),
+  isSelf: z.boolean(),
+  /** The viewer is an admin and may appoint moderators. */
+  viewerIsAdmin: z.boolean(),
+});
+export type AdminUserCardDto = z.infer<typeof adminUserCardDto>;
+
+/** POST /admin/users/:id/actions — `karma_change` needs a delta and a comment. */
+export const userActionInput = z
+  .object({
+    action: z.enum(USER_MODERATION_ACTIONS),
+    karmaDelta: z
+      .number()
+      .int()
+      .min(-MODERATION_KARMA_DELTA_MAX)
+      .max(MODERATION_KARMA_DELTA_MAX)
+      .refine((delta) => delta !== 0, 'Изменение не может быть нулевым')
+      .nullish()
+      .transform((value) => value ?? null),
+    comment: optionalText(
+      multiLine(MODERATION_COMMENT_MAX, `Комментарий — до ${MODERATION_COMMENT_MAX} символов`),
+    ),
+  })
+  .refine((input) => input.action !== 'karma_change' || input.karmaDelta !== null, {
+    path: ['karmaDelta'],
+    error: `Укажите изменение кармы: от 1 до ${MODERATION_KARMA_DELTA_MAX} в любую сторону`,
+  })
+  .refine((input) => input.action !== 'karma_change' || input.comment !== null, {
+    path: ['comment'],
+    error: 'Напишите, за что меняется карма: пользователь это увидит',
+  });
+export type UserActionInput = z.infer<typeof userActionInput>;
+export type UserActionRequest = z.input<typeof userActionInput>;
+
+/** POST /admin/lobbies/:id/cancel — the comment goes to the log only. */
+export const adminCancelLobbyInput = z.object({
+  comment: optionalText(
+    multiLine(MODERATION_COMMENT_MAX, `Комментарий — до ${MODERATION_COMMENT_MAX} символов`),
+  ),
+});
+export type AdminCancelLobbyInput = z.infer<typeof adminCancelLobbyInput>;
+
+export const adminCancelLobbyResponse = z.strictObject({ lobby: adminLobbyDto });
+export type AdminCancelLobbyResponse = z.infer<typeof adminCancelLobbyResponse>;
 
 /**
  * Error body built by the API's apiError(), including the 409/400/500 bodies of the exception

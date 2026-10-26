@@ -6,17 +6,20 @@ import {
   HOSTED_UPCOMING_MAX,
   LOBBIES_PER_DAY_MAX,
   CREATION_BLOCKED_APPEAL,
-  CREATION_BLOCKED_TITLE,
+  CREATION_BLOCKED_TITLES,
   PLACE_TOO_FAR_MESSAGE,
   START_ISSUE_MESSAGES,
   type ApiErrorCode,
+  type CreationBlockKind,
   type ApiErrorDto,
 } from '@masl/shared';
 
 /** Codes whose message needs data; every other code has a constant message. */
 interface ApiErrorParams {
+  creation_blocked: { kind: CreationBlockKind };
   daily_limit: { newbie: boolean; retryAt: Date; now: Date };
   karma_too_low: { minKarma: number; karma: number };
+  appeal_too_soon: { retryAt: Date; now: Date };
 }
 
 type ParamsArg<C extends ApiErrorCode> = C extends keyof ApiErrorParams ? [params: ApiErrorParams[C]] : [];
@@ -58,6 +61,18 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, HttpStatus>> = {
   attendance_closed: HttpStatus.CONFLICT,
   attendance_saved: HttpStatus.CONFLICT,
   checked_in_member: HttpStatus.BAD_REQUEST,
+  report_own_lobby: HttpStatus.BAD_REQUEST,
+  reports_daily_limit: HttpStatus.TOO_MANY_REQUESTS,
+  not_blocked: HttpStatus.CONFLICT,
+  appeal_open: HttpStatus.CONFLICT,
+  appeal_too_soon: HttpStatus.TOO_MANY_REQUESTS,
+  forbidden_moderation: HttpStatus.FORBIDDEN,
+  case_not_found: HttpStatus.NOT_FOUND,
+  case_resolved: HttpStatus.CONFLICT,
+  decision_mismatch: HttpStatus.BAD_REQUEST,
+  user_not_found: HttpStatus.NOT_FOUND,
+  self_moderation: HttpStatus.FORBIDDEN,
+  admin_only: HttpStatus.FORBIDDEN,
   rate_limited: HttpStatus.TOO_MANY_REQUESTS,
   conflict: HttpStatus.CONFLICT,
   invalid_data: HttpStatus.BAD_REQUEST,
@@ -71,7 +86,7 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, HttpStatus>> = {
  */
 const MESSAGES: MessageMap = {
   not_onboarded: 'Сначала заполните профиль',
-  creation_blocked: `${CREATION_BLOCKED_TITLE}. ${CREATION_BLOCKED_APPEAL}`,
+  creation_blocked: ({ kind }) => `${CREATION_BLOCKED_TITLES[kind]}. ${CREATION_BLOCKED_APPEAL}`,
   daily_limit: ({ newbie, retryAt, now }) =>
     newbie
       ? `Новичкам доступна одна встреча в сутки. Следующую можно создать ${formatRetryAfter(retryAt, now)}`
@@ -106,6 +121,18 @@ const MESSAGES: MessageMap = {
   attendance_closed: 'Время отметить, кто пришёл, вышло',
   attendance_saved: 'Вы уже отметили, кто пришёл',
   checked_in_member: 'Нельзя отметить отсутствие того, кто отметился на месте',
+  report_own_lobby: 'На свою встречу пожаловаться нельзя',
+  reports_daily_limit: 'Слишком много жалоб за сутки. Попробуйте завтра',
+  not_blocked: 'Создание встреч не заблокировано, обжаловать нечего',
+  appeal_open: 'Апелляция уже на рассмотрении. Ответ придёт в бот',
+  appeal_too_soon: ({ retryAt, now }) => `Новую апелляцию можно подать ${formatRetryAfter(retryAt, now)}`,
+  forbidden_moderation: 'Раздел только для модераторов',
+  case_not_found: 'Дело не найдено',
+  case_resolved: 'Дело уже решено',
+  decision_mismatch: 'Это решение не подходит к делу',
+  user_not_found: 'Пользователь не найден',
+  self_moderation: 'Решения о себе принимает другой модератор',
+  admin_only: 'Назначать модераторов может только админ',
   rate_limited: 'Слишком много запросов. Подождите немного',
   conflict: 'Данные изменились, попробуйте ещё раз',
   invalid_data: 'Некорректные данные',
@@ -132,8 +159,8 @@ export function apiError<C extends ApiErrorCode>(code: C, ...[params]: ParamsArg
   const entry = MESSAGES[code] as string | ((p: NonNullable<typeof params>) => string);
   const message = typeof entry === 'function' ? entry(params!) : entry;
   const body: ApiErrorDto = { statusCode: API_ERROR_STATUS[code], code, message };
-  if (code === 'daily_limit') {
-    body.retryAt = (params as ApiErrorParams['daily_limit']).retryAt.toISOString();
+  if (code === 'daily_limit' || code === 'appeal_too_soon') {
+    body.retryAt = (params as { retryAt: Date }).retryAt.toISOString();
   }
   const path = ISSUE_PATHS[code];
   if (path) {
