@@ -113,6 +113,14 @@
 
       <KarmaHistory />
 
+      <a
+        href="/terms"
+        class="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-gray-dark bg-gray-dark/40 px-4"
+      >
+        <span>Пользовательское соглашение</span>
+        <ChevronRight size={20} class="text-gray-light" />
+      </a>
+
       <footer class="flex flex-col gap-1 pt-4 pb-2 text-xs text-gray">
         <!-- Plain text: a link would navigate the Mini App's webview away. -->
         <p>Карта: OpenFreeMap · © OpenStreetMap</p>
