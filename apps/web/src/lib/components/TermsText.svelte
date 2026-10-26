@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Filled in by the owner before the test starts (todo.md).
+  // Service operator and contact, shown in sections 1, 6 and 8.
   const OPERATOR = 'Галкин Артём Геннадьевич';
   const CONTACT = '@Tembl4ka';
 
