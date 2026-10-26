@@ -161,6 +161,12 @@ export const onboardingInput = z.object({
 });
 export type OnboardingInput = z.infer<typeof onboardingInput>;
 
+/** PUT /me/terms — accepts the user agreement of this version (TERMS_VERSION). */
+export const acceptTermsInput = z.object({
+  version: z.number().int().positive(),
+});
+export type AcceptTermsInput = z.infer<typeof acceptTermsInput>;
+
 /** Current user's profile as returned by the API. */
 export const meDto = z.object({
   id: z.string().uuid(),
@@ -174,6 +180,8 @@ export const meDto = z.object({
   karma: z.number().int(),
   interests: z.array(z.string()),
   onboarded: z.boolean(),
+  /** The current version of the user agreement (TERMS_VERSION) is accepted. */
+  termsAccepted: z.boolean(),
   /** The bot may message the user privately (exact address, approvals, attendance). */
   botCanWrite: z.boolean(),
   role: z.enum(USER_ROLES),

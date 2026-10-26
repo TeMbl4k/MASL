@@ -105,6 +105,9 @@ export const users = pgTable(
     /** Appointed by an admin; admins themselves come from ADMIN_TELEGRAM_IDS. */
     isModerator: boolean('is_moderator').notNull().default(false),
     onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
+    /** Version of the user agreement last accepted and when (TERMS_VERSION). */
+    termsVersion: smallint('terms_version'),
+    termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
     ...timestamps,
   },
@@ -114,6 +117,7 @@ export const users = pgTable(
       'users_creation_block_chk',
       sql`${t.lobbyCreationBlocked} = (${t.creationBlockedReason} is not null) and (${t.creationBlockedReason} is null) = (${t.creationBlockedAt} is null)`,
     ),
+    check('users_terms_chk', sql`(${t.termsVersion} is null) = (${t.termsAcceptedAt} is null)`),
   ],
 );
 
