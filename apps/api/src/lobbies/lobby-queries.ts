@@ -43,6 +43,7 @@ import {
   type LobbyStatus,
 } from '@masl/shared';
 import type { DbTransaction } from '../karma/karma.service.js';
+import { termsAccepted } from '../users/terms.js';
 
 /**
  * Query builders of the lobby module. Public builders never read the exact place
@@ -498,6 +499,7 @@ export async function loadViewerContext(
     .select({
       karma: users.karma,
       onboardedAt: users.onboardedAt,
+      termsVersion: users.termsVersion,
       lobbyCreationBlocked: users.lobbyCreationBlocked,
       creationBlockKind: users.creationBlockedReason,
     })
@@ -534,7 +536,8 @@ export async function loadViewerContext(
   return {
     userId,
     karma: user.karma,
-    onboarded: user.onboardedAt !== null,
+    // Without the current agreement the user may not act, as if not onboarded.
+    onboarded: user.onboardedAt !== null && termsAccepted(user),
     lobbyCreationBlocked: user.lobbyCreationBlocked,
     creationBlockKind: user.creationBlockKind,
     // Interest slugs and lobby categories share their values (decisions.md).

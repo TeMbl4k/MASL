@@ -17,6 +17,7 @@ import { createTestDatabase, type TestDatabase } from '@masl/db/testing';
 import {
   KARMA,
   LOBBY_DEFAULT_SLOTS,
+  TERMS_VERSION,
   classifyMetroDistance,
   type AuthResponse,
   type CreateLobbyInput,
@@ -114,6 +115,9 @@ export interface TestApp {
   /** Forgets every rate-limit window; call in beforeEach. */
   resetRateLimits: () => void;
   login: (telegramId?: number, firstName?: string) => Promise<AuthResponse>;
+  /** PUT /api/me/terms with the current TERMS_VERSION. */
+  acceptTerms: (token: string) => Promise<MeDto>;
+  /** Accepts the agreement, then onboards. */
   onboard: (token: string, interests?: string[]) => Promise<MeDto>;
   loginOnboarded: (telegramId?: number, firstName?: string) => Promise<AuthResponse>;
   /** POST /api/lobbies with lobbyInput(overrides); the raw response. */
@@ -159,7 +163,21 @@ export async function bootApp(options: BootOptions = {}): Promise<TestApp> {
     return response.json<AuthResponse>();
   };
 
+  const acceptTerms = async (token: string) => {
+    const response = await ready.inject({
+      method: 'PUT',
+      url: '/api/me/terms',
+      headers: authHeader(token),
+      payload: { version: TERMS_VERSION },
+    });
+    if (response.statusCode !== 200) {
+      throw new Error(`accepting terms failed: ${response.statusCode} ${response.body}`);
+    }
+    return response.json<MeDto>();
+  };
+
   const onboard = async (token: string, interests: string[] = ['sport', 'boardgames', 'bars']) => {
+    await acceptTerms(token);
     const response = await ready.inject({
       method: 'PUT',
       url: '/api/me/onboarding',
@@ -185,6 +203,7 @@ export async function bootApp(options: BootOptions = {}): Promise<TestApp> {
     handleUpdate: (update) => ready.get<Bot>(BOT).handleUpdate(telegram.update(update)),
     resetRateLimits: () => ready.get(FixedWindowStore).clear(),
     login,
+    acceptTerms,
     onboard,
     loginOnboarded: async (telegramId, firstName) => {
       const auth = await login(telegramId, firstName);

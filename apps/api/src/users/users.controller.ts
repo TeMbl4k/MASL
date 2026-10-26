@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Inject, Put, UseGuards } from '@nestjs/common';
 import {
+  acceptTermsInput,
   meDto,
   onboardingInput,
   updateInterestsInput,
+  type AcceptTermsInput,
   type MeDto,
   type OnboardingInput,
   type UpdateInterestsInput,
@@ -23,6 +25,17 @@ export class UsersController {
   @ResponseSchema(meDto)
   me(@CurrentUserId() userId: string): Promise<MeDto> {
     return this.users.getMe(userId);
+  }
+
+  /** Accepts the user agreement; required before onboarding and on every new version. */
+  @Put('terms')
+  @RateLimit('lobbyWrite')
+  @ResponseSchema(meDto)
+  acceptTerms(
+    @CurrentUserId() userId: string,
+    @Body(new ZodValidationPipe(acceptTermsInput)) body: AcceptTermsInput,
+  ): Promise<MeDto> {
+    return this.users.acceptTerms(userId, body);
   }
 
   /** Repeatable (it replaces the interests), so it shares the write limit of PUT /me/interests. */

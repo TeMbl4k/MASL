@@ -5,6 +5,7 @@ import { createTestDatabase, type TestDatabase } from '@masl/db/testing';
 import {
   effectiveLobbyStatus,
   feedQuery,
+  TERMS_VERSION,
   type FeedQuery,
   type FeedResponse,
   type LobbyCategory,
@@ -61,7 +62,12 @@ describe.skipIf(!adminUrl)('FeedService (requires TEST_DATABASE_URL)', () => {
   });
 
   const viewerWith = async (interests: LobbyCategory[] = ['sport'], karma?: number) => {
-    const user = await insertUser(handle.db, { onboardedAt: NOW, ...(karma === undefined ? {} : { karma }) });
+    const user = await insertUser(handle.db, {
+      onboardedAt: NOW,
+      termsVersion: TERMS_VERSION,
+      termsAcceptedAt: NOW,
+      ...(karma === undefined ? {} : { karma }),
+    });
     await setInterests(user.id, interests);
     return user;
   };
