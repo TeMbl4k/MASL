@@ -4,6 +4,7 @@ import {
   bigserial,
   boolean,
   check,
+  date,
   index,
   integer,
   pgEnum,
@@ -23,6 +24,7 @@ import {
   CREATION_BLOCK_KINDS,
   FEEDBACK_RATINGS,
   GENDERS,
+  INVITE_STATUSES,
   KARMA,
   KARMA_REASONS,
   LOBBY_CANCEL_COMMENT_MAX,
@@ -42,6 +44,12 @@ import {
   REPORT_COMMENT_MAX,
   REPORT_REASONS,
   APPEAL_TEXT_MAX,
+  LINK_TAG_SLUG_MAX,
+  LINK_TAG_TITLE_MAX,
+  PUBLIC_CODE_LENGTH,
+  SUPPORT_CATEGORIES,
+  SUPPORT_REPLY_MAX,
+  SUPPORT_TEXT_MAX,
   type NotificationKind,
   type ReportNotCounted,
 } from '@masl/shared';
@@ -59,6 +67,8 @@ export const creationBlockKindEnum = pgEnum('creation_block_kind', CREATION_BLOC
 export const moderationCaseKindEnum = pgEnum('moderation_case_kind', MODERATION_CASE_KINDS);
 export const moderationDecisionEnum = pgEnum('moderation_decision', MODERATION_DECISIONS);
 export const moderationActionEnum = pgEnum('moderation_action', MODERATION_ACTIONS);
+export const inviteStatusEnum = pgEnum('invite_status', INVITE_STATUSES);
+export const supportCategoryEnum = pgEnum('support_category', SUPPORT_CATEGORIES);
 
 /** `decision in ('a','b')` for the decisions of one case kind. */
 const decisionsOf = (kind: keyof typeof CASE_DECISIONS) =>
@@ -108,11 +118,22 @@ export const users = pgTable(
     /** Version of the user agreement last accepted and when (TERMS_VERSION). */
     termsVersion: smallint('terms_version'),
     termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }),
+    /** Random hex code of the public profile and of shared links; never the id or Telegram id. */
+    publicCode: varchar('public_code', { length: PUBLIC_CODE_LENGTH })
+      .notNull()
+      .default(
+        sql`substr(replace(gen_random_uuid()::text, '-', ''), 1, ${sql.raw(String(PUBLIC_CODE_LENGTH))})`,
+      ),
+    /** «Не показывать меня в поиске» (the invite screen); companions still see the user. */
+    hideFromSearch: boolean('hide_from_search').notNull().default(false),
+    /** «Приглашения на встречи»: false, nobody can invite the user. */
+    invitesEnabled: boolean('invites_enabled').notNull().default(true),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
     ...timestamps,
   },
   (t) => [
     uniqueIndex('users_telegram_id_uq').on(t.telegramId),
+    uniqueIndex('users_public_code_uq').on(t.publicCode),
     check(
       'users_creation_block_chk',
       sql`${t.lobbyCreationBlocked} = (${t.creationBlockedReason} is not null) and (${t.creationBlockedReason} is null) = (${t.creationBlockedAt} is null)`,
@@ -240,6 +261,8 @@ export const lobbyMembers = pgTable(
     chatJoinedAt: timestamp('chat_joined_at', { withTimezone: true }),
     /** The host's toggle in the bot's attendance poll, before the save. */
     attendanceAbsentDraft: boolean('attendance_absent_draft').notNull().default(false),
+    /** The invite the membership came from (stage 6): «по приглашению» in the host's list. */
+    inviteId: uuid('invite_id').references((): AnyPgColumn => lobbyInvites.id, { onDelete: 'set null' }),
     ...timestamps,
   },
   (t) => [
@@ -328,6 +351,11 @@ export const notifications = pgTable(
     memberId: uuid('member_id').references(() => lobbyMembers.id, { onDelete: 'cascade' }),
     /** Moderation messages are about a case, not a lobby. */
     caseId: uuid('case_id').references(() => moderationCases.id, { onDelete: 'cascade' }),
+    inviteId: uuid('invite_id').references((): AnyPgColumn => lobbyInvites.id, { onDelete: 'cascade' }),
+    /** «Написать нам» messages are about a request. */
+    supportId: uuid('support_id').references((): AnyPgColumn => supportRequests.id, {
+      onDelete: 'cascade',
+    }),
     kind: varchar('kind', { length: 40 }).$type<NotificationKind>().notNull(),
     /** At most one pending row per key (debounce). */
     dedupeKey: varchar('dedupe_key', { length: 120 }),
@@ -347,8 +375,13 @@ export const notifications = pgTable(
       .on(t.dedupeKey)
       .where(sql`${t.sentAt} is null and ${t.failedAt} is null`),
     index('notifications_lobby_kind_idx').on(t.lobbyId, t.kind),
+    // The daily cap of invite messages per person.
+    index('notifications_user_kind_idx').on(t.userId, t.kind, t.createdAt),
     check('notifications_target_chk', sql`(${t.userId} is null) <> (${t.chatId} is null)`),
-    check('notifications_subject_chk', sql`${t.lobbyId} is not null or ${t.caseId} is not null`),
+    check(
+      'notifications_subject_chk',
+      sql`${t.lobbyId} is not null or ${t.caseId} is not null or ${t.supportId} is not null`,
+    ),
   ],
 );
 
@@ -463,6 +496,106 @@ export const moderationActions = pgTable(
   (t) => [index('moderation_actions_subject_idx').on(t.subjectId, t.createdAt)],
 );
 
+/**
+ * «Пригласить» (stage 6): one invite per lobby and invitee, whoever sends it. `by_host` is fixed
+ * when sent: «Иду» on the host's invite makes a member, on a member's invite an application.
+ */
+export const lobbyInvites = pgTable(
+  'lobby_invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    lobbyId: uuid('lobby_id')
+      .notNull()
+      .references(() => lobbies.id, { onDelete: 'cascade' }),
+    inviterId: uuid('inviter_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    inviteeId: uuid('invitee_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    byHost: boolean('by_host').notNull(),
+    status: inviteStatusEnum('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    answeredAt: timestamp('answered_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('lobby_invites_lobby_invitee_uq').on(t.lobbyId, t.inviteeId),
+    // The inviter's daily cap.
+    index('lobby_invites_inviter_created_idx').on(t.inviterId, t.createdAt),
+    index('lobby_invites_invitee_idx').on(t.inviteeId, t.createdAt),
+    check('lobby_invites_answered_chk', sql`(${t.status} = 'pending') = (${t.answeredAt} is null)`),
+    check('lobby_invites_self_chk', sql`${t.inviterId} <> ${t.inviteeId}`),
+  ],
+);
+
+/** «Написать нам»: read by admins, answered once through the bot. */
+export const supportRequests = pgTable(
+  'support_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    authorId: uuid('author_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    category: supportCategoryEnum('category').notNull(),
+    text: varchar('text', { length: SUPPORT_TEXT_MAX }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    reply: varchar('reply', { length: SUPPORT_REPLY_MAX }),
+    repliedAt: timestamp('replied_at', { withTimezone: true }),
+    repliedBy: uuid('replied_by').references(() => users.id, { onDelete: 'set null' }),
+    /** Answered or closed without an answer. */
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('support_requests_author_created_idx').on(t.authorId, t.createdAt),
+    index('support_requests_open_idx')
+      .on(t.createdAt)
+      .where(sql`${t.closedAt} is null`),
+    check('support_requests_reply_chk', sql`(${t.reply} is null) = (${t.repliedAt} is null)`),
+    check('support_requests_closed_chk', sql`${t.reply} is null or ${t.closedAt} is not null`),
+  ],
+);
+
+/** An admin's source tag for links in channels and on stickers. */
+export const linkTags = pgTable('link_tags', {
+  id: serial('id').primaryKey(),
+  slug: varchar('slug', { length: LINK_TAG_SLUG_MAX }).notNull().unique('link_tags_slug_uq'),
+  title: varchar('title', { length: LINK_TAG_TITLE_MAX }).notNull(),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+});
+
+/**
+ * Where a new user came from: the first valid link within ARRIVAL_WINDOW_HOURS of sign-up, a
+ * friend's (the sharer) or an admin's tag. No row: no link.
+ */
+export const userArrivals = pgTable(
+  'user_arrivals',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    referrerId: uuid('referrer_id').references(() => users.id, { onDelete: 'set null' }),
+    tagId: integer('tag_id').references(() => linkTags.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    index('user_arrivals_tag_idx').on(t.tagId),
+    check('user_arrivals_one_source_chk', sql`${t.referrerId} is null or ${t.tagId} is null`),
+  ],
+);
+
+/** Moscow days on which a user opened the app: the uniques of the admin statistics. */
+export const userActivityDays = pgTable(
+  'user_activity_days',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    day: date('day', { mode: 'string' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.day] }), index('user_activity_days_day_idx').on(t.day)],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Interest = typeof interests.$inferSelect;
@@ -475,3 +608,6 @@ export type Notification = typeof notifications.$inferSelect;
 export type ModerationCase = typeof moderationCases.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type ModerationActionRow = typeof moderationActions.$inferSelect;
+export type LobbyInvite = typeof lobbyInvites.$inferSelect;
+export type SupportRequest = typeof supportRequests.$inferSelect;
+export type LinkTag = typeof linkTags.$inferSelect;
