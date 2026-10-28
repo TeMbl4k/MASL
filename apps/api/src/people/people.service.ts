@@ -7,6 +7,7 @@ import {
   type CompanionsResponse,
   type PublicProfileDto,
 } from '@masl/shared';
+import { loadEarnedIds } from '../achievements/achievement-queries.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
@@ -57,7 +58,7 @@ export class PeopleService {
     const hostedWhere = person.isSelf
       ? and(eq(lobbies.hostId, person.id), eq(lobbies.status, 'open'), gt(lobbies.startsAt, now))
       : and(eq(lobbies.hostId, person.id), discoverableWhere(viewerId, now));
-    const [cards, interests, hosted, attended, companions, isCompanion] = await Promise.all([
+    const [cards, interests, hosted, attended, companions, isCompanion, achievements] = await Promise.all([
       selectLobbyCards(this.db, viewerId)
         .where(hostedWhere)
         .orderBy(asc(lobbies.startsAt), asc(lobbies.id))
@@ -83,6 +84,7 @@ export class PeopleService {
         .where(and(eq(lobbyMembers.userId, person.id), eq(lobbyMembers.status, 'attended'))),
       countCompanions(this.db, person.id),
       person.isSelf ? false : areCompanions(this.db, viewerId, person.id),
+      loadEarnedIds(this.db, person.id),
     ]);
     return {
       code: person.code,
@@ -93,6 +95,7 @@ export class PeopleService {
       attended: attended[0]?.n ?? 0,
       companions,
       interests: interests.map((r) => r.slug),
+      achievements,
       lobbies: cards.map((row) => toLobbyCard(row, viewer, now)),
       isSelf: person.isSelf,
       isCompanion,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { START_PARAM_MAX } from './constants.js';
-import { buildStartParam, parseStartParam, startAppLink, type StartLink } from './links.js';
+import { buildStartParam, lobbyIdFromLink, parseStartParam, startAppLink, type StartLink } from './links.js';
 import { inviteCandidatesQuery, linkTagInput, sendInvitesInput, shareInput } from './schemas.js';
 
 const LOBBY_ID = '3f2b8c1e-9a4d-4e6f-8b7a-0c1d2e3f4a5b';
@@ -45,6 +45,22 @@ describe('start parameters', () => {
 
   it('builds t.me links to the main Mini App', () => {
     expect(startAppLink('masl_bot', 't_channel')).toBe('https://t.me/masl_bot?startapp=t_channel');
+  });
+
+  it('finds the lobby of a pasted link', () => {
+    const shared = startAppLink('masl_bot', buildStartParam(links[0]!));
+    expect(lobbyIdFromLink(` ${shared} `)).toBe(LOBBY_ID);
+    expect(lobbyIdFromLink(`https://masl.example/lobby/${LOBBY_ID}`)).toBe(LOBBY_ID);
+    expect(lobbyIdFromLink(`https://masl.example/lobby/${LOBBY_ID}/manage`)).toBe(LOBBY_ID);
+    for (const other of [
+      startAppLink('masl_bot', `p_${CODE}`),
+      'https://t.me/masl_bot?startapp=l_123',
+      `https://masl.example/lobby/${LOBBY_ID}x`,
+      LOBBY_ID,
+      'не ссылка',
+    ]) {
+      expect(lobbyIdFromLink(other)).toBeNull();
+    }
   });
 });
 

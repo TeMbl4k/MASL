@@ -97,6 +97,26 @@
   );
 }
 
+/* «Моя визитка»: black at the top so the header reads, the brand at the bottom. */
+.bg-card-screen {
+  background: linear-gradient(
+    180deg,
+    var(--color-ink) 0%,
+    color-mix(in srgb, var(--color-brand-deep) 25%, var(--color-ink)) 55%,
+    var(--color-brand-deep) 85%,
+    var(--color-brand) 100%
+  );
+}
+
+/* The halo behind a new achievement. */
+.bg-achievement-glow {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--color-brand) 35%, transparent),
+    transparent 70%
+  );
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

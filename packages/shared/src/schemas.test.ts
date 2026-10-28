@@ -403,6 +403,7 @@ describe('response schemas fail closed', () => {
     attendance: null,
     canInvite: false,
     invite: null,
+    hostBadges: [],
   };
   const exactPlace = { address: 'CANARY-ул. Тестовая, 1', point: { lat: 55.7951, lng: 37.5502 } };
 

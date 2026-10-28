@@ -141,6 +141,11 @@ export const NOTIFICATION_KINDS = [
   'user_invite',
   'admin_new_support',
   'user_support_reply',
+  'user_achievements',
+  'user_friend_counted',
+  'user_qr_print',
+  'admin_tag_qr_print',
+  'user_broadcast',
   'group_welcome',
   'group_finished',
   'group_cancelled',
@@ -229,6 +234,9 @@ export const API_ERROR_CODES = [
   'support_not_found',
   'support_closed',
   'tag_exists',
+  'tag_not_found',
+  'bot_blocked',
+  'qr_prints_daily_limit',
   'rate_limited',
   'conflict',
   'invalid_data',
@@ -358,3 +366,35 @@ export type StatsPeriod = (typeof STATS_PERIODS)[number];
 /** Where new users came from: a friend's link, an admin's tag, or no link. */
 export const ARRIVAL_SOURCES = ['friends', 'tag', 'none'] as const;
 export type ArrivalSource = (typeof ARRIVAL_SOURCES)[number];
+
+/**
+ * Achievements (stage 7) in the order of the shelf: earned for marked attendance, hosted
+ * meetups and friends who reached a meetup. Each is earned once and never taken back.
+ */
+export const ACHIEVEMENTS = [
+  'first_meetup',
+  'regular',
+  'local',
+  'no_skips',
+  'explorer',
+  'versatile',
+  'sociable',
+  'first_hosted',
+  'organizer',
+  'full_house',
+  'brought_friend',
+  'ambassador',
+] as const;
+export type Achievement = (typeof ACHIEVEMENTS)[number];
+
+/** Sections of «Мои ачивки». */
+export const ACHIEVEMENT_GROUPS = ['meetups', 'hosting', 'friends'] as const;
+export type AchievementGroup = (typeof ACHIEVEMENT_GROUPS)[number];
+
+/** Shown next to the host on a lobby page, in this order of preference (HOST_BADGES_MAX). */
+export const HOST_BADGE_ACHIEVEMENTS = [
+  'organizer',
+  'full_house',
+  'no_skips',
+  'local',
+] as const satisfies readonly Achievement[];

@@ -5,7 +5,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull, lte } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { Bot } from 'grammy';
 import { notifications, users, type Database, type Notification } from '@masl/db';
 import { HOUR_MS, type NotificationKind } from '@masl/shared';
@@ -20,11 +20,21 @@ import { classifyTelegramError, describeTelegramError } from './telegram-errors.
 
 export type OutboxTarget = { userId: string; chatId?: never } | { chatId: number; userId?: never };
 
-/** What the message is about: a lobby, a moderation case, or a feedback request. */
+type Subject<K extends string, V> = { [P in K]: V } & {
+  [P in Exclude<'lobbyId' | 'caseId' | 'supportId' | 'tagId' | 'broadcastId', K>]?: never;
+};
+
+/**
+ * What the message is about: a lobby, a moderation case, a feedback request, a link tag or a
+ * broadcast; achievements and the QR card are about the recipient and have none.
+ */
 export type OutboxSubject =
-  | { lobbyId: string; caseId?: never; supportId?: never }
-  | { caseId: string; lobbyId?: never; supportId?: never }
-  | { supportId: string; lobbyId?: never; caseId?: never };
+  | Subject<'lobbyId', string>
+  | Subject<'caseId', string>
+  | Subject<'supportId', string>
+  | Subject<'tagId', number>
+  | Subject<'broadcastId', string>
+  | Subject<never, never>;
 
 export type OutboxMessage = OutboxTarget &
   OutboxSubject & {
@@ -113,6 +123,8 @@ export class OutboxService implements OnApplicationBootstrap, OnApplicationShutd
           lobbyId: m.lobbyId ?? null,
           caseId: m.caseId ?? null,
           supportId: m.supportId ?? null,
+          tagId: m.tagId ?? null,
+          broadcastId: m.broadcastId ?? null,
           memberId: m.memberId ?? null,
           inviteId: m.inviteId ?? null,
           kind: m.kind,
@@ -159,7 +171,12 @@ export class OutboxService implements OnApplicationBootstrap, OnApplicationShutd
       .where(
         and(isNull(notifications.sentAt), isNull(notifications.failedAt), lte(notifications.sendAfter, now)),
       )
-      .orderBy(asc(notifications.sendAfter), asc(notifications.id))
+      // Broadcasts wait behind every message about meetups that is due.
+      .orderBy(
+        sql`${notifications.broadcastId} is not null`,
+        asc(notifications.sendAfter),
+        asc(notifications.id),
+      )
       .limit(BATCH)
       .for('update', { skipLocked: true });
     return this.db

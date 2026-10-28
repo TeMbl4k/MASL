@@ -1,10 +1,12 @@
 import {
+  ACHIEVEMENT_TEXTS,
   KARMA,
   LATE_CANCEL_WINDOW_HOURS,
   LOBBY_CANCEL_REASON_LABELS,
   attendanceSaveLabel,
   formatMoscow,
   formatMoscowTime,
+  type Achievement,
   type Instant,
   type LobbyCancelReasonOut,
 } from '@masl/shared';
@@ -201,6 +203,40 @@ export const texts = {
   adminNewSupport: (category: string, firstName: string, text: string) =>
     [`Новое обращение · ${category} · ${firstName}`, '', text].join('\n'),
   userSupportReply: (reply: string) => ['Ответ на ваше обращение:', '', reply].join('\n'),
+
+  userAchievements: (
+    earned: readonly Achievement[],
+    next: { id: Achievement; current: number; goal: number } | null,
+  ) =>
+    [
+      earned.length === 1
+        ? `Новая ачивка: «${ACHIEVEMENT_TEXTS[earned[0]!].title}»`
+        : `Новые ачивки: ${earned.map((id) => `«${ACHIEVEMENT_TEXTS[id].title}»`).join(', ')}`,
+      ...earned.map((id) => ACHIEVEMENT_TEXTS[id].praise),
+      next ? `Следующая — «${ACHIEVEMENT_TEXTS[next.id].title}»: ${next.current} из ${next.goal}.` : null,
+    ]
+      .filter((line) => line !== null)
+      .join('\n'),
+  achievementsButton: 'Мои ачивки',
+  // «Друг» is what the verb agrees with, whoever the friend is.
+  userFriendCounted: (companionName: string | null, arrived: number, reached: number) =>
+    [
+      companionName
+        ? `Друг по вашей ссылке, ${companionName}, сходил на первую встречу.`
+        : 'Друг, который пришёл по вашей ссылке, сходил на первую встречу.',
+      `По вашей ссылке пришли: ${arrived}, дошли до встречи: ${reached}.`,
+    ].join('\n'),
+  userQrPrint:
+    'QR вашей визитки для печати. Он ведёт на ваш профиль в MASL, и друзья, пришедшие по нему, засчитываются вам. Печатайте от 2 см.',
+  adminTagQrPrint: (title: string) =>
+    `QR метки «${title}» для печати. Он ведёт в ленту MASL, новые люди записываются на эту метку.`,
+
+  broadcastOpenApp: 'Открыть MASL',
+  broadcastOpenLobby: 'Открыть встречу',
+  newsOff: 'Отписаться от новостей',
+  newsOffDone:
+    'Вы отписались от новостей. Заявки, адреса встреч, приглашения и ачивки будут приходить как раньше.\nВернуть новости можно в профиле: «Новости MASL».',
+  newsOffAlready: 'Вы уже отписаны от новостей',
 };
 
 /** Admin rights the bot needs in the meetup group, with their names in BotFather's terms. */

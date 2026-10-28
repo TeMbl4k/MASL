@@ -1,9 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, gt, inArray, isNotNull, max, sql } from 'drizzle-orm';
 import type { InlineKeyboardButton, InlineKeyboardMarkup } from 'grammy/types';
-import type { RawApi } from 'grammy';
+import { InputFile, type RawApi } from 'grammy';
 import {
+  broadcasts,
   karmaEvents,
+  linkTags,
   lobbies,
   lobbyFeedback,
   lobbyInvites,
@@ -12,11 +14,14 @@ import {
   notifications,
   reports,
   supportRequests,
+  userAchievements,
+  userArrivals,
   users,
   type Database,
   type Notification,
 } from '@masl/db';
 import {
+  ACHIEVEMENTS,
   FEEDBACK_MEMBERSHIP_STATUSES,
   NEWBIE_ATTENDED_MIN,
   REPORT_REASONS,
@@ -27,10 +32,14 @@ import {
   attendanceState,
   effectiveLobbyStatus,
   lowerMinKarma,
+  achievementProgress,
+  nextAchievement,
   type FeedbackRating,
   type LobbyStatus,
   type MembershipStatus,
 } from '@masl/shared';
+import { qrSvgDocument } from '@masl/shared/qr';
+import { loadAchievementMetrics, loadEarnedIds } from '../achievements/achievement-queries.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
@@ -38,6 +47,7 @@ import { inviteWorks, inviterUser } from '../invites/invite-queries.js';
 import { hostUser } from '../lobbies/lobby-queries.js';
 import { parseCancelReason } from '../lobbies/lobby.mapper.js';
 import { userRole } from '../moderation/roles.js';
+import { areCompanions } from '../people/companions.js';
 import {
   approvedCountSql,
   attendedCountSql,
@@ -50,7 +60,13 @@ import { texts } from './messages.js';
 
 /** Bot API methods the outbox sends. */
 type OutboxMethod =
-  'sendMessage' | 'sendVenue' | 'revokeChatInviteLink' | 'banChatMember' | 'unbanChatMember' | 'leaveChat';
+  | 'sendMessage'
+  | 'sendVenue'
+  | 'sendDocument'
+  | 'revokeChatInviteLink'
+  | 'banChatMember'
+  | 'unbanChatMember'
+  | 'leaveChat';
 
 export type TelegramCall = {
   [M in OutboxMethod]: { method: M; payload: Parameters<RawApi[M]>[0] };
@@ -159,6 +175,51 @@ interface PrivateMessage {
   venue?: { latitude: number; longitude: number; title: string; address: string };
 }
 
+/** A private message as Bot API calls: the text, then the venue if any. */
+function privateCalls(chatId: number, message: PrivateMessage): TelegramCall[] {
+  const calls: TelegramCall[] = [
+    {
+      method: 'sendMessage',
+      payload: {
+        chat_id: chatId,
+        text: message.text,
+        reply_markup: message.markup,
+        link_preview_options: { is_disabled: true },
+      },
+    },
+  ];
+  if (message.venue) calls.push({ method: 'sendVenue', payload: { chat_id: chatId, ...message.venue } });
+  return calls;
+}
+
+/** The QR of `link` as an SVG file to print. */
+function qrDocument(chatId: number, link: string, filename: string, caption: string): TelegramCall {
+  return {
+    method: 'sendDocument',
+    payload: {
+      chat_id: chatId,
+      document: new InputFile(Buffer.from(qrSvgDocument(link), 'utf8'), filename),
+      caption,
+    },
+  };
+}
+
+/** A broadcast's buttons: the meetup or the app, and «Отписаться от новостей». */
+export async function broadcastMarkup(
+  links: AppLinks,
+  lobbyId: string | null,
+  broadcastId: string | null,
+): Promise<InlineKeyboardMarkup | undefined> {
+  return keyboard([
+    [
+      lobbyId
+        ? await links.button(texts.broadcastOpenLobby, appPaths.lobby(lobbyId))
+        : await links.button(texts.broadcastOpenApp, appPaths.feed()),
+    ],
+    [{ text: texts.newsOff, callback_data: encodeCallback({ action: 'news_off', broadcastId }) }],
+  ]);
+}
+
 /**
  * Turns an outbox row into Bot API calls from the current rows; null skips a message that is no
  * longer true (the member left, the lobby was cancelled, attendance was saved). The exact
@@ -176,7 +237,8 @@ export class OutboxRenderer {
   async render(row: Notification): Promise<TelegramCall[] | null> {
     if (row.caseId !== null) return this.renderCase(row, row.caseId);
     if (row.supportId !== null) return this.renderSupport(row, row.supportId);
-    if (row.lobbyId === null) return null;
+    if (row.broadcastId !== null) return this.renderBroadcast(row, row.broadcastId);
+    if (row.lobbyId === null) return this.renderAboutRecipient(row);
     const lobby = await loadLobby(this.db, row.lobbyId);
     if (!lobby) return null;
     const status = effectiveLobbyStatus(lobby, this.clock.now());
@@ -188,22 +250,7 @@ export class OutboxRenderer {
       .where(eq(users.id, row.userId!));
     if (!user) return null;
     const message = await this.renderPrivate(row, lobby, status);
-    if (!message) return null;
-    const calls: TelegramCall[] = [
-      {
-        method: 'sendMessage',
-        payload: {
-          chat_id: user.telegramId,
-          text: message.text,
-          reply_markup: message.markup,
-          link_preview_options: { is_disabled: true },
-        },
-      },
-    ];
-    if (message.venue) {
-      calls.push({ method: 'sendVenue', payload: { chat_id: user.telegramId, ...message.venue } });
-    }
-    return calls;
+    return message ? privateCalls(user.telegramId, message) : null;
   }
 
   private async renderPrivate(
@@ -385,9 +432,126 @@ export class OutboxRenderer {
           ]),
         };
       }
+      case 'user_friend_counted': {
+        if (member?.status !== 'attended' || row.userId === null) return null;
+        const recipientId = row.userId;
+        const [companion, arrived, metrics] = await Promise.all([
+          areCompanions(this.db, recipientId, member.userId),
+          this.db
+            .select({ n: sql<number>`count(*)::int`.mapWith(Number) })
+            .from(userArrivals)
+            .where(eq(userArrivals.referrerId, recipientId)),
+          loadAchievementMetrics(this.db, recipientId),
+        ]);
+        return {
+          text: texts.userFriendCounted(
+            companion ? member.firstName : null,
+            arrived[0]?.n ?? 0,
+            metrics.friends,
+          ),
+          markup: keyboard([[await appButton(texts.achievementsButton, appPaths.achievements())]]),
+        };
+      }
       default:
         return null;
     }
+  }
+
+  /**
+   * Messages about the recipient themselves (stage 7): new achievements since the last such
+   * message, the QR card or a link tag's QR as an SVG file.
+   */
+  private async renderAboutRecipient(row: Notification): Promise<TelegramCall[] | null> {
+    if (row.userId === null) return null;
+    const [recipient] = await this.db
+      .select({
+        telegramId: users.telegramId,
+        isModerator: users.isModerator,
+        publicCode: users.publicCode,
+      })
+      .from(users)
+      .where(eq(users.id, row.userId));
+    if (!recipient) return null;
+    switch (row.kind) {
+      case 'user_achievements': {
+        const earned = await this.unannouncedAchievements(row.userId);
+        if (earned.length === 0) return null;
+        const metrics = await loadAchievementMetrics(this.db, row.userId);
+        const next = nextAchievement(metrics, new Set(await loadEarnedIds(this.db, row.userId)));
+        return privateCalls(recipient.telegramId, {
+          text: texts.userAchievements(earned, next && { id: next, ...achievementProgress(metrics, next) }),
+          markup: keyboard([[await this.links.button(texts.achievementsButton, appPaths.achievements())]]),
+        });
+      }
+      case 'user_qr_print': {
+        const link = await this.links.profileLink(recipient.publicCode);
+        if (link === null) return null;
+        return [
+          qrDocument(recipient.telegramId, link, `masl-qr-${recipient.publicCode}.svg`, texts.userQrPrint),
+        ];
+      }
+      case 'admin_tag_qr_print': {
+        if (row.tagId === null || userRole(recipient, this.env.ADMIN_TELEGRAM_IDS) !== 'admin') return null;
+        const [tag] = await this.db
+          .select({ slug: linkTags.slug, title: linkTags.title })
+          .from(linkTags)
+          .where(eq(linkTags.id, row.tagId));
+        const link = tag ? await this.links.tagLink(tag.slug) : null;
+        if (!tag || link === null) return null;
+        return [
+          qrDocument(recipient.telegramId, link, `masl-qr-${tag.slug}.svg`, texts.adminTagQrPrint(tag.title)),
+        ];
+      }
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * An admin's broadcast while the recipient still wants news. Plain text with the action and
+   * «Отписаться от новостей».
+   */
+  private async renderBroadcast(row: Notification, broadcastId: string): Promise<TelegramCall[] | null> {
+    if (row.userId === null) return null;
+    const [recipient] = await this.db
+      .select({ telegramId: users.telegramId, newsEnabled: users.newsEnabled })
+      .from(users)
+      .where(eq(users.id, row.userId));
+    const [broadcast] = await this.db
+      .select({ text: broadcasts.text, lobbyId: broadcasts.lobbyId })
+      .from(broadcasts)
+      .where(eq(broadcasts.id, broadcastId));
+    if (!recipient?.newsEnabled || !broadcast) return null;
+    return privateCalls(recipient.telegramId, {
+      text: broadcast.text,
+      markup: await broadcastMarkup(this.links, broadcast.lobbyId, broadcastId),
+    });
+  }
+
+  /** Achievements earned since the last achievements message went out, the backfill's aside. */
+  private async unannouncedAchievements(userId: string) {
+    const [last] = await this.db
+      .select({ at: max(notifications.sentAt) })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.kind, 'user_achievements'),
+          isNotNull(notifications.sentAt),
+        ),
+      );
+    const rows = await this.db
+      .select({ id: userAchievements.achievement })
+      .from(userAchievements)
+      .where(
+        and(
+          eq(userAchievements.userId, userId),
+          eq(userAchievements.silent, false),
+          last?.at ? gt(userAchievements.earnedAt, last.at) : undefined,
+        ),
+      );
+    const ids = new Set(rows.map((r) => r.id));
+    return ACHIEVEMENTS.filter((id) => ids.has(id));
   }
 
   private async renderGroup(
@@ -505,17 +669,7 @@ export class OutboxRenderer {
       default:
         return null;
     }
-    return [
-      {
-        method: 'sendMessage',
-        payload: {
-          chat_id: recipient.telegramId,
-          text: message.text,
-          reply_markup: message.markup,
-          link_preview_options: { is_disabled: true },
-        },
-      },
-    ];
+    return privateCalls(recipient.telegramId, message);
   }
 
   /**
@@ -558,17 +712,7 @@ export class OutboxRenderer {
     } else {
       return null;
     }
-    return [
-      {
-        method: 'sendMessage',
-        payload: {
-          chat_id: recipient.telegramId,
-          text: message.text,
-          reply_markup: message.markup,
-          link_preview_options: { is_disabled: true },
-        },
-      },
-    ];
+    return privateCalls(recipient.telegramId, message);
   }
 
   private async newCaseText(

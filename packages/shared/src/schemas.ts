@@ -4,6 +4,8 @@ import {
   AGE_MIN,
   APPEAL_TEXT_MAX,
   APPEAL_TEXT_MIN,
+  BROADCAST_TEXT_MAX,
+  BROADCAST_TEXT_MIN,
   FEED_PAGE_SIZE,
   FEED_PAGE_SIZE_MAX,
   INTERESTS_MAX,
@@ -40,6 +42,7 @@ import {
   USER_SEARCH_MIN,
 } from './constants.js';
 import {
+  ACHIEVEMENTS,
   API_ERROR_CODES,
   APPEAL_STATUSES,
   ARRIVAL_SOURCES,
@@ -50,6 +53,7 @@ import {
   CREATION_BLOCK_KINDS,
   FEEDBACK_RATINGS,
   GENDERS,
+  HOST_BADGE_ACHIEVEMENTS,
   INVITE_CANDIDATE_STATES,
   INVITE_STATES,
   KARMA_REASONS,
@@ -211,6 +215,10 @@ export const meDto = z.object({
   hideFromSearch: z.boolean(),
   /** «Приглашения на встречи»: off, nobody can invite the user. */
   invitesEnabled: z.boolean(),
+  /** «Новости MASL»: broadcasts from the admin; service messages come regardless. */
+  newsEnabled: z.boolean(),
+  /** Achievements the app hasn't shown yet («Новая ачивка»), in shelf order. */
+  newAchievements: z.array(z.enum(ACHIEVEMENTS)),
 });
 export type MeDto = z.infer<typeof meDto>;
 
@@ -463,6 +471,8 @@ const lobbyDetailBase = lobbyCardDto.extend({
   canInvite: z.boolean(),
   /** The viewer's unanswered invite to this lobby, while it still works. */
   invite: z.strictObject({ id: z.uuid(), byHost: z.boolean(), from: z.string() }).nullable(),
+  /** The host's achievements shown next to them, up to HOST_BADGES_MAX. */
+  hostBadges: z.array(z.enum(HOST_BADGE_ACHIEVEMENTS)),
 });
 
 /** GET /lobbies/:id and every lobby mutation; only `member` and `host` carry the exact place. */
@@ -996,8 +1006,12 @@ export const shareResponse = z.strictObject({
 });
 export type ShareResponse = z.infer<typeof shareResponse>;
 
-/** PUT /me/privacy */
-export const privacyInput = z.object({ hideFromSearch: z.boolean(), invitesEnabled: z.boolean() });
+/** PUT /me/privacy — with «Новости MASL» (stage 7). */
+export const privacyInput = z.object({
+  hideFromSearch: z.boolean(),
+  invitesEnabled: z.boolean(),
+  newsEnabled: z.boolean(),
+});
 export type PrivacyInput = z.infer<typeof privacyInput>;
 
 /** GET /people/:code — no age, gender, username, Telegram id or the meetups the person joins. */
@@ -1012,6 +1026,8 @@ export const publicProfileDto = z.strictObject({
   attended: z.number().int(),
   companions: z.number().int(),
   interests: z.array(z.string()),
+  /** Earned achievements in shelf order, without dates or progress. */
+  achievements: z.array(z.enum(ACHIEVEMENTS)),
   /** The person's hosted lobbies that are open and have not started, the viewer's view. */
   lobbies: z.array(lobbyCardDto),
   isSelf: z.boolean(),
@@ -1227,6 +1243,8 @@ export const linkTagDto = z.strictObject({
   link: z.url().nullable(),
   /** New users whose source is the tag, all time. */
   arrivals: z.number().int(),
+  /** Of them, attended at least one meetup. */
+  attended: z.number().int(),
   createdAt: isoOut,
 });
 export type LinkTagDto = z.infer<typeof linkTagDto>;
@@ -1234,6 +1252,110 @@ export type LinkTagDto = z.infer<typeof linkTagDto>;
 /** GET and POST /admin/tags — newest first. */
 export const linkTagsResponse = z.strictObject({ items: z.array(linkTagDto) });
 export type LinkTagsResponse = z.infer<typeof linkTagsResponse>;
+
+// Stage 7: achievements, friends, QR cards and broadcasts.
+
+export const achievementDto = z.strictObject({
+  id: z.enum(ACHIEVEMENTS),
+  earnedAt: isoOut.nullable(),
+  /** Progress toward the goal, capped at it; an earned one shows the goal. */
+  current: z.number().int(),
+  goal: z.number().int(),
+});
+export type AchievementDto = z.infer<typeof achievementDto>;
+
+/** GET /me/achievements — the owner's only: progress and the numbers of «Пригласить друзей». */
+export const myAchievementsResponse = z.strictObject({
+  items: z.array(achievementDto),
+  /** The goal to show next on the profile; null when everything is earned. */
+  next: z.enum(ACHIEVEMENTS).nullable(),
+  friends: z.strictObject({
+    /** People whose source is the owner's link. */
+    arrived: z.number().int(),
+    /** Of them, marked present at a meetup of another host. */
+    reached: z.number().int(),
+  }),
+});
+export type MyAchievementsResponse = z.infer<typeof myAchievementsResponse>;
+
+/** POST /me/achievements/seen — «Новая ачивка» was shown. */
+export const achievementsSeenResponse = z.strictObject({ seen: z.number().int() });
+export type AchievementsSeenResponse = z.infer<typeof achievementsSeenResponse>;
+
+/** POST /me/card/print and /admin/tags/:id/print — the bot sends the QR file. */
+export const qrPrintResponse = z.strictObject({
+  sent: z.literal(true),
+  /** Prints left today; null without a cap (the team). */
+  left: z.number().int().nullable(),
+});
+export type QrPrintResponse = z.infer<typeof qrPrintResponse>;
+
+/** `:id` of a link tag. */
+export const tagIdParam = z.coerce.number().int().positive().max(2_147_483_647);
+
+const broadcastText = boundedMultiLine(BROADCAST_TEXT_MIN, BROADCAST_TEXT_MAX, {
+  tooShort: `Напишите от ${BROADCAST_TEXT_MIN} символов`,
+  tooLong: `Рассылка — до ${BROADCAST_TEXT_MAX} символов`,
+});
+/** null: everyone; otherwise people with at least one of the interests. */
+const broadcastInterests = z
+  .array(interestSlug)
+  .min(1, 'Выберите хотя бы один интерес')
+  .refine((list) => new Set(list).size === list.length, 'Интересы не должны повторяться')
+  .nullable();
+
+/** POST /admin/broadcasts/audience */
+export const broadcastAudienceInput = z.object({ interests: broadcastInterests });
+export type BroadcastAudienceInput = z.infer<typeof broadcastAudienceInput>;
+
+/** Who would get a broadcast now, and whom it skips, each counted once in this order. */
+export const broadcastAudienceDto = z.strictObject({
+  recipients: z.number().int(),
+  skipped: z.strictObject({
+    unsubscribed: z.number().int(),
+    botBlocked: z.number().int(),
+    recent: z.number().int(),
+  }),
+});
+export type BroadcastAudienceDto = z.infer<typeof broadcastAudienceDto>;
+
+/** POST /admin/broadcasts and /admin/broadcasts/test. `lobbyId`: «Открыть встречу», else «Открыть MASL». */
+export const broadcastInput = z.object({
+  text: broadcastText,
+  interests: broadcastInterests,
+  lobbyId: z.uuid().nullable(),
+});
+export type BroadcastInput = z.infer<typeof broadcastInput>;
+
+export const broadcastDto = z.strictObject({
+  id: z.uuid(),
+  text: z.string(),
+  interests: z.array(z.string()).nullable(),
+  lobby: z.strictObject({ id: z.uuid(), title: z.string() }).nullable(),
+  createdAt: isoOut,
+  author: userRef.nullable(),
+  /** Messages queued at the send. */
+  recipients: z.number().int(),
+  delivered: z.number().int(),
+  failed: z.number().int(),
+  /** Not sent yet; skipped at send time (unsubscribed since) count as neither. */
+  pending: z.number().int(),
+  /** Unsubscribed with this broadcast's button. */
+  unsubscribed: z.number().int(),
+});
+export type BroadcastDto = z.infer<typeof broadcastDto>;
+
+/** GET /admin/broadcasts — the newest first. */
+export const broadcastsResponse = z.strictObject({
+  items: z.array(broadcastDto),
+  /** Onboarded people without a shadow ban, and those of them with «Новости MASL» on. */
+  people: z.strictObject({ total: z.number().int(), subscribed: z.number().int() }),
+});
+export type BroadcastsResponse = z.infer<typeof broadcastsResponse>;
+
+/** POST /admin/broadcasts/test */
+export const broadcastTestResponse = z.strictObject({ sent: z.literal(true) });
+export type BroadcastTestResponse = z.infer<typeof broadcastTestResponse>;
 
 /**
  * Error body built by the API's apiError(), including the 409/400/500 bodies of the exception

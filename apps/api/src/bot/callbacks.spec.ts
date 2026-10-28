@@ -15,6 +15,8 @@ describe('bot callback data', () => {
     { action: 'invite_accept', inviteId: ID },
     { action: 'invite_decline', inviteId: ID },
     { action: 'invite_opt_out', inviteId: ID },
+    { action: 'news_off', broadcastId: ID },
+    { action: 'news_off', broadcastId: null },
   ];
 
   it('round-trips every callback within 64 bytes', () => {
@@ -36,6 +38,8 @@ describe('bot callback data', () => {
       `a:t:${ID.toUpperCase()}`,
       `i:maybe:${ID}`,
       'i:y:1',
+      'n:off:1',
+      `n:on:${ID}`,
     ]) {
       expect(decodeCallback(data)).toBeNull();
     }

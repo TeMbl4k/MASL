@@ -1,8 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, inArray, max } from 'drizzle-orm';
-import { linkTags, moderationActions, userArrivals, users, type Database } from '@masl/db';
+import { and, asc, count, desc, eq, inArray, max, sql } from 'drizzle-orm';
+import { linkTags, lobbyMembers, moderationActions, userArrivals, users, type Database } from '@masl/db';
 import {
-  buildStartParam,
   type AdminTeamResponse,
   type LinkTagInput,
   type LinkTagsResponse,
@@ -75,7 +74,7 @@ export class TeamService {
     return { items };
   }
 
-  /** Link tags, newest first, with their all-time arrivals. */
+  /** Link tags, newest first, with their all-time arrivals and how many of them attended. */
   async tags(): Promise<LinkTagsResponse> {
     const rows = await this.db
       .select({
@@ -84,6 +83,10 @@ export class TeamService {
         title: linkTags.title,
         createdAt: linkTags.createdAt,
         arrivals: count(userArrivals.userId),
+        attended: sql<number>`count(${userArrivals.userId}) filter (where exists (
+          select 1 from ${lobbyMembers} m where m.user_id = ${userArrivals.userId} and m.status = 'attended'))`.mapWith(
+          Number,
+        ),
       })
       .from(linkTags)
       .leftJoin(userArrivals, eq(userArrivals.tagId, linkTags.id))
@@ -94,10 +97,9 @@ export class TeamService {
         id: row.id,
         slug: row.slug,
         title: row.title,
-        link: await this.links.startLink(
-          buildStartParam({ target: { kind: 'feed' }, source: { kind: 'tag', slug: row.slug } }),
-        ),
+        link: await this.links.tagLink(row.slug),
         arrivals: row.arrivals,
+        attended: row.attended,
         createdAt: row.createdAt.toISOString(),
       })),
     );

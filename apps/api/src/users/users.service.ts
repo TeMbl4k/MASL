@@ -21,8 +21,10 @@ import {
   type OnboardingInput,
   type PrivacyInput,
   type UpdateInterestsInput,
+  type Achievement,
   type UserRole,
 } from '@masl/shared';
+import { loadUnseen } from '../achievements/achievement-queries.js';
 import type { TelegramIdentity } from '../auth/init-data.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
@@ -124,12 +126,17 @@ export class UsersService {
     return { recorded: inserted.length > 0 };
   }
 
-  /** «Не показывать меня в поиске» and «Приглашения на встречи»; the caller's own row only. */
+  /** «Не показывать меня в поиске», «Приглашения на встречи», «Новости MASL»; the caller's own row only. */
   async updatePrivacy(userId: string, input: PrivacyInput): Promise<MeDto> {
     const now = this.clock.now();
     await this.db
       .update(users)
-      .set({ hideFromSearch: input.hideFromSearch, invitesEnabled: input.invitesEnabled, updatedAt: now })
+      .set({
+        hideFromSearch: input.hideFromSearch,
+        invitesEnabled: input.invitesEnabled,
+        newsEnabled: input.newsEnabled,
+        updatedAt: now,
+      })
       .where(eq(users.id, userId));
     return this.getMe(userId);
   }
@@ -141,7 +148,7 @@ export class UsersService {
     }
     const role = userRole(user, this.env.ADMIN_TELEGRAM_IDS);
     const queue = role === 'user' ? null : await countOpenCases(this.db);
-    return this.toMeDto(user, await this.interestsOf(userId), role, queue);
+    return this.toMeDto(user, await this.interestsOf(userId), role, queue, await loadUnseen(this.db, userId));
   }
 
   /**
@@ -226,6 +233,7 @@ export class UsersService {
     interestSlugs: string[],
     role: UserRole,
     moderationQueue: number | null,
+    newAchievements: Achievement[],
     now: Date = new Date(),
   ): MeDto {
     return {
@@ -247,6 +255,8 @@ export class UsersService {
       publicCode: user.publicCode,
       hideFromSearch: user.hideFromSearch,
       invitesEnabled: user.invitesEnabled,
+      newsEnabled: user.newsEnabled,
+      newAchievements,
     };
   }
 

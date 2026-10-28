@@ -35,6 +35,7 @@ import { KarmaService, type DbTransaction } from '../karma/karma.service.js';
 import { creationBlock } from '../users/creation-block.js';
 import { inviteWorks, loadViewerInvite } from '../invites/invite-queries.js';
 import { resolveLobbyAccess } from './lobby-access.js';
+import { loadHostBadges } from '../achievements/achievement-queries.js';
 import { toExactPlace, toLobbyDetail, toPerson, membershipOf, type DetailAccess } from './lobby.mapper.js';
 import {
   loadCreationCounters,
@@ -398,7 +399,8 @@ export class LobbiesService {
       canInvite: works && viewer.onboarded && (rights.isHost || row.memberStatus === 'approved'),
       invite: works && !rights.isHost && !taking ? await loadViewerInvite(db, lobbyId, viewerId) : null,
     };
-    return toLobbyDetail(row, viewer, now, access, members, extras, invites);
+    const hostBadges = await loadHostBadges(db, row.hostId);
+    return toLobbyDetail(row, viewer, now, access, members, extras, invites, hostBadges);
   }
 
   /** Locks the actor's user row, the first lock of every user mutation (spec §8). */

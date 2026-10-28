@@ -1,3 +1,5 @@
+import type { Achievement } from './enums.js';
+
 /**
  * Product constants from the concept docs (code_artifact.md, gemini-code-*.md).
  * Values missing from the spec go here only after the owner decides on them (see decisions.md).
@@ -111,6 +113,42 @@ export const SUPPORT_REPLY_MAX = 1000;
 export const SUPPORT_PAGE_SIZE = 50;
 /** Days on the «Уники по дням» chart of the «Всё время» period. */
 export const STATS_ALL_TIME_DAYS = 90;
+
+/**
+ * Stage 7: achievements, friends, QR cards and broadcasts (decisions.md). What each achievement
+ * needs: meetups attended, a run without a no-show, stations, categories, companions, hosted
+ * meetups someone attended, full houses, friends who reached a meetup.
+ */
+export const ACHIEVEMENT_GOALS: Readonly<Record<Achievement, number>> = {
+  first_meetup: 1,
+  regular: 5,
+  local: 20,
+  no_skips: 10,
+  explorer: 5,
+  versatile: 4,
+  sociable: 10,
+  first_hosted: 1,
+  organizer: 5,
+  full_house: 1,
+  brought_friend: 1,
+  ambassador: 5,
+};
+/** «Полный сбор»: every place of a hosted meetup with at least this many places was attended. */
+export const FULL_HOUSE_MIN_SLOTS = 3;
+/** New achievements are collected for this long into one bot message. */
+export const ACHIEVEMENTS_NOTIFY_DELAY_SECONDS = 60;
+/** Achievements shown next to the host on a lobby page. */
+export const HOST_BADGES_MAX = 2;
+/** «Прислать для печати»: QR files the bot sends one person in a rolling day (the team: no cap). */
+export const QR_PRINTS_PER_DAY = 5;
+export const QR_PRINTS_WINDOW_HOURS = 24;
+/** A broadcast's text, in visible characters. */
+export const BROADCAST_TEXT_MIN = 10;
+export const BROADCAST_TEXT_MAX = 1000;
+/** One person gets at most one broadcast in this many hours; the rest skip them. */
+export const BROADCAST_GAP_HOURS = 24;
+/** Broadcasts on the admin's history. */
+export const BROADCASTS_LIST_MAX = 50;
 
 /** How many interest tags a user picks during onboarding. */
 export const INTERESTS_MIN = 3;
@@ -227,5 +265,9 @@ export const RATE_LIMITS = {
   share: { limit: 20, windowSeconds: 60 },
   inviteWrite: { limit: 10, windowSeconds: 60 },
   supportWrite: { limit: 5, windowSeconds: 60 },
+  qrPrint: { limit: 5, windowSeconds: 60 },
+  /** «Отправить себе» of a broadcast draft. */
+  broadcastTest: { limit: 10, windowSeconds: 3600 },
+  broadcastWrite: { limit: 5, windowSeconds: 60 },
 } as const;
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

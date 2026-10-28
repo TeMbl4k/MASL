@@ -1,8 +1,10 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { AchievementsModule } from './achievements/achievements.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { BotHandlersModule } from './bot/bot-handlers.module.js';
+import { BroadcastsModule } from './broadcasts/broadcasts.module.js';
 import { ClockModule } from './clock/clock.module.js';
 import { EnvModule } from './config/env.module.js';
 import type { Env } from './config/env.js';
@@ -17,6 +19,7 @@ import { LobbiesModule } from './lobbies/lobbies.module.js';
 import { ModerationModule } from './moderation/moderation.module.js';
 import { PeopleModule } from './people/people.module.js';
 import { PlacesModule } from './places/places.module.js';
+import { QrModule } from './qr/qr.module.js';
 import { RateLimitModule } from './rate-limit/rate-limit.module.js';
 import { SupportModule } from './support/support.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -35,11 +38,14 @@ export class AppModule {
         UsersModule,
         InterestsModule,
         KarmaModule,
+        AchievementsModule,
         LobbiesModule,
         InvitesModule,
         ModerationModule,
         SupportModule,
         AdminModule,
+        BroadcastsModule,
+        QrModule,
         PeopleModule,
         PlacesModule,
         BotHandlersModule,

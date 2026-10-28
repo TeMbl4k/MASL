@@ -2,7 +2,9 @@ import { RequestMethod, type Type } from '@nestjs/common';
 import { GUARDS_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
 import { ModulesContainer } from '@nestjs/core';
 import type { RouteOptions } from 'fastify';
+import { AchievementsModule } from '../src/achievements/achievements.module.js';
 import { AdminModule } from '../src/admin/admin.module.js';
+import { BroadcastsModule } from '../src/broadcasts/broadcasts.module.js';
 import { RESPONSE_SCHEMA } from '../src/contracts/response-schema.decorator.js';
 import { InvitesModule } from '../src/invites/invites.module.js';
 import { KarmaModule } from '../src/karma/karma.module.js';
@@ -11,6 +13,7 @@ import { ModerationModule } from '../src/moderation/moderation.module.js';
 import { AdminGuard, ModeratorGuard } from '../src/moderation/moderator.guard.js';
 import { PeopleModule } from '../src/people/people.module.js';
 import { PlacesModule } from '../src/places/places.module.js';
+import { QrModule } from '../src/qr/qr.module.js';
 import { RATE_LIMIT_BUCKETS } from '../src/rate-limit/rate-limit.decorator.js';
 import { RateLimitGuard } from '../src/rate-limit/rate-limit.guard.js';
 import { AuthGuard } from '../src/session/auth.guard.js';
@@ -32,6 +35,9 @@ const SCHEMA_MODULES: readonly Type[] = [
   InvitesModule,
   SupportModule,
   AdminModule,
+  AchievementsModule,
+  QrModule,
+  BroadcastsModule,
 ];
 
 interface Handler {
