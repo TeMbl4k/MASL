@@ -63,3 +63,23 @@ export function startAppLink(botUsername: string, startParam: string): string {
   const base = `https://t.me/${botUsername}`;
   return startParam ? `${base}?startapp=${startParam}` : `${base}?startapp`;
 }
+
+const LINK = /^https?:\/\/[^/?#\s]+(\/[^?#\s]*)?(\?[^#\s]*)?(#\S*)?$/;
+const LOBBY_PATH = /\/lobby\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?(?:\/[^?#]*)?$/;
+const START_APP = /(?:^\?|&)startapp=([^&]*)/;
+
+/**
+ * The lobby a pasted link opens: a t.me link from «Поделиться» or the Mini App's own lobby
+ * address; null for anything else.
+ */
+export function lobbyIdFromLink(text: string): string | null {
+  const link = LINK.exec(text.trim());
+  if (!link) return null;
+  const [, path = '', query = ''] = link;
+  const startParam = START_APP.exec(query)?.[1];
+  if (startParam !== undefined) {
+    const target = parseStartParam(startParam)?.target;
+    return target?.kind === 'lobby' ? target.id : null;
+  }
+  return LOBBY_PATH.exec(path)?.[1] ?? null;
+}
