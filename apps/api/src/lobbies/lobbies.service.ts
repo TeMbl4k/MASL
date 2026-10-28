@@ -9,6 +9,7 @@ import {
   MINUTE_MS,
   NEWBIE_ATTENDED_MIN,
   NEWBIE_LOBBIES_PER_DAY,
+  OCCUPYING_MEMBERSHIP_STATUSES,
   HOUR_MS,
   classifyMetroDistance,
   effectiveLobbyStatus,
@@ -22,6 +23,7 @@ import {
   type CreateLobbyInput,
   type CreationContextDto,
   type LobbyDetailDto,
+  type MembershipStatus,
 } from '@masl/shared';
 import { nearestStation, placeHint } from '@masl/shared/metro';
 import { OutboxService } from '../bot/outbox.service.js';
@@ -31,6 +33,7 @@ import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
 import { KarmaService, type DbTransaction } from '../karma/karma.service.js';
 import { creationBlock } from '../users/creation-block.js';
+import { inviteWorks, loadViewerInvite } from '../invites/invite-queries.js';
 import { resolveLobbyAccess } from './lobby-access.js';
 import { toExactPlace, toLobbyDetail, toPerson, membershipOf, type DetailAccess } from './lobby.mapper.js';
 import {
@@ -49,6 +52,8 @@ import {
   type ViewerContext,
 } from './lobby-queries.js';
 
+const OCCUPYING: readonly MembershipStatus[] = OCCUPYING_MEMBERSHIP_STATUSES;
+
 /** Where the creation limits stand for a user (spec §2.1); shared by create and creation-context. */
 export interface CreationLimits {
   isNewbie: boolean;
@@ -60,12 +65,13 @@ export interface CreationLimits {
   upcomingCount: number;
 }
 
-export function creationLimits(counters: CreationCounters): CreationLimits {
+/** `team`: admins and moderators, whose daily limit never sets in. */
+export function creationLimits(counters: CreationCounters, team = false): CreationLimits {
   const isNewbie = counters.attended < NEWBIE_ATTENDED_MIN;
   const dailyLimit = isNewbie ? NEWBIE_LOBBIES_PER_DAY : LOBBIES_PER_DAY_MAX;
   const created = counters.createdInWindow;
   // The limit lifts when enough of the oldest lobbies leave the window to get below it.
-  const freeing = created.length >= dailyLimit ? created[created.length - dailyLimit] : undefined;
+  const freeing = !team && created.length >= dailyLimit ? created[created.length - dailyLimit] : undefined;
   return {
     isNewbie,
     dailyLimit,
@@ -81,7 +87,7 @@ export function createBlock(viewer: ViewerContext, limits: CreationLimits): Crea
   if (!viewer.onboarded) return 'not_onboarded';
   if (viewer.lobbyCreationBlocked) return 'blocked';
   if (limits.retryAt !== null) return 'daily_limit';
-  if (limits.upcomingCount >= limits.upcomingLimit) return 'upcoming_limit';
+  if (!viewer.team && limits.upcomingCount >= limits.upcomingLimit) return 'upcoming_limit';
   return null;
 }
 
@@ -112,7 +118,7 @@ export class LobbiesService {
   async creationContext(userId: string): Promise<CreationContextDto> {
     const now = this.clock.now();
     const viewer = await this.viewer(this.db, userId, now);
-    const limits = creationLimits(await loadCreationCounters(this.db, userId, now));
+    const limits = creationLimits(await loadCreationCounters(this.db, userId, now), viewer.team);
     const reason = createBlock(viewer, limits);
     return {
       canCreate: reason === null,
@@ -157,7 +163,7 @@ export class LobbiesService {
         };
       }
 
-      const limits = creationLimits(await loadCreationCounters(tx, userId, now));
+      const limits = creationLimits(await loadCreationCounters(tx, userId, now), viewer.team);
       const block = createBlock(viewer, limits);
       if (block === 'daily_limit') {
         throw apiError('daily_limit', { newbie: limits.isNewbie, retryAt: limits.retryAt!, now });
@@ -368,7 +374,7 @@ export class LobbiesService {
    */
   async detailFor(db: Executor, request: DetailRequest): Promise<LobbyDetailDto> {
     const { lobbyId, viewerId, now } = request;
-    const { row, rights } = await this.visibleLobby(
+    const { row, rights, effectiveStatus } = await this.visibleLobby(
       db,
       lobbyId,
       viewerId,
@@ -386,7 +392,13 @@ export class LobbiesService {
     }
     const members = rights.canSeeMembers ? (await membersQuery(db, lobbyId)).map(toPerson) : null;
     const extras = rights.canSeeMembers ? await loadDetailExtras(db, lobbyId, viewerId) : null;
-    return toLobbyDetail(row, viewer, now, access, members, extras);
+    const works = inviteWorks({ effectiveStatus, approvedCount: row.approvedCount, slots: row.slots });
+    const taking = row.memberStatus !== null && OCCUPYING.includes(row.memberStatus);
+    const invites = {
+      canInvite: works && viewer.onboarded && (rights.isHost || row.memberStatus === 'approved'),
+      invite: works && !rights.isHost && !taking ? await loadViewerInvite(db, lobbyId, viewerId) : null,
+    };
+    return toLobbyDetail(row, viewer, now, access, members, extras, invites);
   }
 
   /** Locks the actor's user row, the first lock of every user mutation (spec §8). */
@@ -396,7 +408,7 @@ export class LobbiesService {
 
   /** The viewer context of an authenticated user; a deleted user's session is void. */
   async viewer(db: Executor, userId: string, now: Date): Promise<ViewerContext> {
-    const viewer = await loadViewerContext(db, userId, now);
+    const viewer = await loadViewerContext(db, userId, now, this.env.ADMIN_TELEGRAM_IDS);
     if (!viewer) throw new UnauthorizedException('Сессия недействительна или истекла');
     return viewer;
   }

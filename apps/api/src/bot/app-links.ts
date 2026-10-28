@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Bot } from 'grammy';
 import type { InlineKeyboardButton } from 'grammy/types';
+import { startAppLink } from '@masl/shared';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { BOT } from './bot.provider.js';
 
@@ -13,6 +14,9 @@ export const appPaths = {
   applications: (lobbyId: string) => `/lobby/${lobbyId}/manage`,
   attendance: (lobbyId: string) => `/lobby/${lobbyId}/attendance`,
   profile: () => '/profile',
+  invites: () => '/my/invites',
+  feedback: () => '/feedback',
+  adminSupport: () => '/admin/support',
   adminCase: (caseId: string) => `/admin/case/${caseId}`,
 };
 
@@ -34,6 +38,20 @@ export class AppLinks {
   async button(text: string, path: string): Promise<InlineKeyboardButton | null> {
     const base = await this.base();
     return base === null ? null : { text, web_app: { url: new URL(path, base).toString() } };
+  }
+
+  /**
+   * A t.me link opening the bot's main Mini App with `startParam` (the Main Mini App must be on in
+   * @BotFather); null while the bot's username is unknown.
+   */
+  async startLink(startParam: string): Promise<string | null> {
+    try {
+      // Fetches getMe once if polling hasn't started yet.
+      await this.bot.init();
+    } catch {
+      return null;
+    }
+    return startAppLink(this.bot.botInfo.username, startParam);
   }
 
   private async base(): Promise<string | null> {

@@ -2,15 +2,19 @@ import { RequestMethod, type Type } from '@nestjs/common';
 import { GUARDS_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
 import { ModulesContainer } from '@nestjs/core';
 import type { RouteOptions } from 'fastify';
+import { AdminModule } from '../src/admin/admin.module.js';
 import { RESPONSE_SCHEMA } from '../src/contracts/response-schema.decorator.js';
+import { InvitesModule } from '../src/invites/invites.module.js';
 import { KarmaModule } from '../src/karma/karma.module.js';
 import { LobbiesModule } from '../src/lobbies/lobbies.module.js';
 import { ModerationModule } from '../src/moderation/moderation.module.js';
-import { ModeratorGuard } from '../src/moderation/moderator.guard.js';
+import { AdminGuard, ModeratorGuard } from '../src/moderation/moderator.guard.js';
+import { PeopleModule } from '../src/people/people.module.js';
 import { PlacesModule } from '../src/places/places.module.js';
 import { RATE_LIMIT_BUCKETS } from '../src/rate-limit/rate-limit.decorator.js';
 import { RateLimitGuard } from '../src/rate-limit/rate-limit.guard.js';
 import { AuthGuard } from '../src/session/auth.guard.js';
+import { SupportModule } from '../src/support/support.module.js';
 import { UsersModule } from '../src/users/users.module.js';
 import { adminUrl, authHeader, bootApp, type TestApp } from './helpers.js';
 
@@ -24,6 +28,10 @@ const SCHEMA_MODULES: readonly Type[] = [
   KarmaModule,
   UsersModule,
   ModerationModule,
+  PeopleModule,
+  InvitesModule,
+  SupportModule,
+  AdminModule,
 ];
 
 interface Handler {
@@ -133,13 +141,14 @@ describe.skipIf(!adminUrl)('every route is guarded (requires TEST_DATABASE_URL)'
     }
   });
 
-  it('every /api/admin route runs ModeratorGuard after AuthGuard and refuses a plain user', async () => {
+  it('every /api/admin route runs ModeratorGuard or AdminGuard after AuthGuard and refuses a plain user', async () => {
     const user = await t.loginOnboarded();
     const admin = collectHandlers(t).filter((h) => h.route.split(' ')[1]!.startsWith('/api/admin/'));
     expect(admin.length).toBeGreaterThan(0);
     for (const h of admin) {
       expect(h.guards.indexOf(AuthGuard), h.route).toBeGreaterThanOrEqual(0);
-      expect(h.guards.indexOf(ModeratorGuard), h.route).toBeGreaterThan(h.guards.indexOf(AuthGuard));
+      const role = Math.max(h.guards.indexOf(ModeratorGuard), h.guards.indexOf(AdminGuard));
+      expect(role, h.route).toBeGreaterThan(h.guards.indexOf(AuthGuard));
       const [method, pattern] = h.route.split(' ') as [string, string];
       const response = await t.app.inject({
         method: method as 'GET',
@@ -152,7 +161,7 @@ describe.skipIf(!adminUrl)('every route is guarded (requires TEST_DATABASE_URL)'
     }
   });
 
-  it('T-AUTH-2: every handler in lobbies, places, karma, users and moderation declares @ResponseSchema', () => {
+  it('T-AUTH-2: every handler of the API modules declares @ResponseSchema', () => {
     const handlers = collectHandlers(t).filter((h) => SCHEMA_MODULES.includes(h.module));
     expect(handlers.length).toBeGreaterThan(0);
     for (const h of handlers) {

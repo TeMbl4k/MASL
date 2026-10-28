@@ -1,0 +1,3 @@
+# False positives: an unknown public profile code in a test and its quote in bugs.md, both rewritten later.
+a02ff1853f3ae7dfcb4b4e17799b2d04b2abea96:apps/api/test/people.e2e-spec.ts:generic-api-key:99
+52de44a16e437d157e0343d4f296578d0e927bbb:bugs.md:generic-api-key:91

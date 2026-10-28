@@ -15,7 +15,7 @@ const emptyBucket = (): LobbyBucketDto => ({ upcoming: [], past: [] });
 class MyLobbies {
   hosting = $state<LobbyBucketDto>(emptyBucket());
   joined = $state<LobbyBucketDto>(emptyBucket());
-  counts = $state<MyLobbiesResponse['counts']>({ hosted: 0, joined: 0 });
+  counts = $state<MyLobbiesResponse['counts']>({ hosted: 0, joined: 0, companions: 0 });
   /** Ended hosted lobbies whose attendance the host still has to mark. */
   attendanceDue = $state<string[]>([]);
   status = $state<LoadStatus>('idle');

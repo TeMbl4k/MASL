@@ -21,7 +21,7 @@ import { apiError } from '../errors/api-error.js';
 import { KarmaService, type DbTransaction } from '../karma/karma.service.js';
 import { LobbiesService } from './lobbies.service.js';
 import { toLobbyCard, toPerson } from './lobby.mapper.js';
-import { lockLobby, lockOwnMembership, type Executor } from './lobby-queries.js';
+import { lockLobby, lockOwnMembership, personColumns, type Executor } from './lobby-queries.js';
 
 /**
  * «Я на месте» and the host's attendance marks (stage 3 §11). Locks follow the global order
@@ -272,9 +272,7 @@ export class AttendanceService {
         status: lobbyMembers.status,
         checkedInAt: lobbyMembers.checkedInAt,
         absentDraft: lobbyMembers.attendanceAbsentDraft,
-        firstName: users.firstName,
-        photoUrl: users.photoUrl,
-        karma: users.karma,
+        ...personColumns,
       })
       .from(lobbyMembers)
       .innerJoin(users, eq(users.id, lobbyMembers.userId))

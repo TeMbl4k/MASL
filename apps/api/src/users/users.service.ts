@@ -1,11 +1,25 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, eq, isNull, ne, or, sql, type SQLWrapper } from 'drizzle-orm';
-import { userInterests, users, type Database, type User } from '@masl/db';
 import {
+  linkTags,
+  userActivityDays,
+  userArrivals,
+  userInterests,
+  users,
+  type Database,
+  type User,
+} from '@masl/db';
+import {
+  ARRIVAL_WINDOW_HOURS,
+  HOUR_MS,
   TERMS_VERSION,
+  moscowDayKey,
+  parseStartParam,
   type AcceptTermsInput,
+  type ArrivalResponse,
   type MeDto,
   type OnboardingInput,
+  type PrivacyInput,
   type UpdateInterestsInput,
   type UserRole,
 } from '@masl/shared';
@@ -64,7 +78,60 @@ export class UsersService {
         },
       })
       .returning();
+    // A sign-in is an app opening: the user counts toward the day's uniques.
+    await this.db
+      .insert(userActivityDays)
+      .values({ userId: user!.id, day: moscowDayKey(this.clock.now()) })
+      .onConflictDoNothing();
     return user!;
+  }
+
+  /**
+   * Records where a new user came from: the first valid link within ARRIVAL_WINDOW_HOURS of
+   * sign-up. A link of an unknown person or tag, or the user's own, is not a source.
+   */
+  async recordArrival(userId: string, startParam: string): Promise<ArrivalResponse> {
+    const link = parseStartParam(startParam);
+    if (!link?.source) return { recorded: false };
+    const now = this.clock.now();
+    const [user] = await this.db
+      .select({ createdAt: users.createdAt, publicCode: users.publicCode })
+      .from(users)
+      .where(eq(users.id, userId));
+    if (!user || now.getTime() - user.createdAt.getTime() > ARRIVAL_WINDOW_HOURS * HOUR_MS) {
+      return { recorded: false };
+    }
+    let source: { referrerId: string } | { tagId: number } | null = null;
+    if (link.source.kind === 'ref') {
+      const [referrer] = await this.db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.publicCode, link.source.code));
+      source = referrer && referrer.id !== userId ? { referrerId: referrer.id } : null;
+    } else {
+      const [tag] = await this.db
+        .select({ id: linkTags.id })
+        .from(linkTags)
+        .where(eq(linkTags.slug, link.source.slug));
+      source = tag ? { tagId: tag.id } : null;
+    }
+    if (!source) return { recorded: false };
+    const inserted = await this.db
+      .insert(userArrivals)
+      .values({ userId, ...source, createdAt: now })
+      .onConflictDoNothing()
+      .returning({ userId: userArrivals.userId });
+    return { recorded: inserted.length > 0 };
+  }
+
+  /** «Не показывать меня в поиске» and «Приглашения на встречи»; the caller's own row only. */
+  async updatePrivacy(userId: string, input: PrivacyInput): Promise<MeDto> {
+    const now = this.clock.now();
+    await this.db
+      .update(users)
+      .set({ hideFromSearch: input.hideFromSearch, invitesEnabled: input.invitesEnabled, updatedAt: now })
+      .where(eq(users.id, userId));
+    return this.getMe(userId);
   }
 
   async getMe(userId: string): Promise<MeDto> {
@@ -177,6 +244,9 @@ export class UsersService {
       botCanWrite: user.allowsWriteToPm,
       role,
       moderationQueue,
+      publicCode: user.publicCode,
+      hideFromSearch: user.hideFromSearch,
+      invitesEnabled: user.invitesEnabled,
     };
   }
 

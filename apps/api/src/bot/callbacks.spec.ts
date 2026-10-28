@@ -12,6 +12,9 @@ describe('bot callback data', () => {
     { action: 'attendance_toggle', memberId: ID },
     { action: 'attendance_save', lobbyId: ID },
     ...FEEDBACK_RATINGS.map((rating) => ({ action: 'feedback' as const, lobbyId: ID, rating })),
+    { action: 'invite_accept', inviteId: ID },
+    { action: 'invite_decline', inviteId: ID },
+    { action: 'invite_opt_out', inviteId: ID },
   ];
 
   it('round-trips every callback within 64 bytes', () => {
@@ -31,6 +34,8 @@ describe('bot callback data', () => {
       'q:lower:1',
       `f:great:${ID}`,
       `a:t:${ID.toUpperCase()}`,
+      `i:maybe:${ID}`,
+      'i:y:1',
     ]) {
       expect(decodeCallback(data)).toBeNull();
     }

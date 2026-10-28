@@ -11,6 +11,7 @@ import { AttendanceService } from '../lobbies/attendance.service.js';
 import { ChatService, type LinkOutcome } from '../lobbies/chat.service.js';
 import { FeedbackService, type FeedbackOutcome } from '../lobbies/feedback.service.js';
 import { LobbiesService } from '../lobbies/lobbies.service.js';
+import { InvitesService } from '../invites/invites.service.js';
 import { FixedWindowStore } from '../rate-limit/fixed-window.store.js';
 import { decodeCallback, encodeCallback, type BotCallback } from './callbacks.js';
 import { attendancePollMarkup, quorumMarkup } from './outbox.renderer.js';
@@ -38,6 +39,7 @@ export class BotUpdates implements OnModuleInit {
     @Inject(LobbiesService) private readonly lobbies: LobbiesService,
     @Inject(AttendanceService) private readonly attendance: AttendanceService,
     @Inject(FeedbackService) private readonly feedback: FeedbackService,
+    @Inject(InvitesService) private readonly invites: InvitesService,
     @Inject(FixedWindowStore) private readonly limits: FixedWindowStore,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -59,6 +61,14 @@ export class BotUpdates implements OnModuleInit {
       await this.setWriteAccess(ctx.from.id, true);
       const open = await this.links.button('Открыть', appPaths.feed());
       await ctx.reply(open ? texts.start() : `${texts.start()}\n${texts.openAppHint}`, {
+        reply_markup: open ? { inline_keyboard: [[open]] } : undefined,
+      });
+    });
+    // «Написать нам» lives in the app, where the request gets its category.
+    privateChats.command('feedback', async (ctx) => {
+      await this.setWriteAccess(ctx.from.id, true);
+      const open = await this.links.button(texts.feedbackButton, appPaths.feedback());
+      await ctx.reply(open ? texts.feedbackPrompt : `${texts.feedbackPrompt}\n${texts.openAppHint}`, {
         reply_markup: open ? { inline_keyboard: [[open]] } : undefined,
       });
     });
@@ -188,6 +198,28 @@ export class BotUpdates implements OnModuleInit {
         const answer = feedbackReply(outcome);
         await ctx.answerCallbackQuery({ text: answer });
         await ctx.editMessageText(`${original}\n\n${answer}`);
+        return;
+      }
+      case 'invite_accept':
+      case 'invite_decline':
+      case 'invite_opt_out': {
+        let answer: string;
+        let lobbyId: string;
+        if (callback.action === 'invite_accept') {
+          const { invite } = await this.invites.accept(userId, callback.inviteId);
+          answer = invite.byHost ? texts.inviteGoing : texts.inviteApplied;
+          lobbyId = invite.lobby.id;
+        } else {
+          const optOut = callback.action === 'invite_opt_out';
+          const { invite } = await this.invites.decline(userId, callback.inviteId, optOut);
+          answer = optOut ? texts.inviteOptedOut : texts.inviteDeclined;
+          lobbyId = invite.lobby.id;
+        }
+        await ctx.answerCallbackQuery({ text: answer });
+        const open = await this.links.button('Открыть встречу', appPaths.lobby(lobbyId));
+        await ctx.editMessageText(`${original}\n\n${answer}`, {
+          reply_markup: open ? { inline_keyboard: [[open]] } : undefined,
+        });
         return;
       }
     }

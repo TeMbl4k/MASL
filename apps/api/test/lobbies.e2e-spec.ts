@@ -715,7 +715,7 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
       expect(idsOf(body.hosting.upcoming)).toEqual([active.id, soon.id, later.id]);
       expect(idsOf(body.hosting.past)).toEqual([cancelled.id, finished.id]);
       expect(body.joined).toEqual({ upcoming: [], past: [] });
-      expect(body.counts).toEqual({ hosted: 4, joined: 0 });
+      expect(body.counts).toEqual({ hosted: 4, joined: 0, companions: 0 });
       expect(body.hosting.upcoming[1]).toMatchObject({
         approvedCount: 1,
         pendingCount: 1,
@@ -760,7 +760,8 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
       expect(all).not.toContain(withdrawn.id);
       expect(all).not.toContain(unrelated.id);
       expect(body.hosting).toEqual({ upcoming: [], past: [] });
-      expect(body.counts).toEqual({ hosted: 0, joined: 4 });
+      // The host of the attended meetup is the one companion.
+      expect(body.counts).toEqual({ hosted: 0, joined: 4, companions: 1 });
       expect(body.joined.past[0]!.viewer).toMatchObject({
         membershipStatus: 'cancelled',
         applyBlock: 'left',
@@ -777,7 +778,7 @@ describe.skipIf(!adminUrl)('lobbies e2e (requires TEST_DATABASE_URL)', () => {
       expect(sneaky.json()).toEqual({
         hosting: { upcoming: [], past: [] },
         joined: { upcoming: [], past: [] },
-        counts: { hosted: 0, joined: 0 },
+        counts: { hosted: 0, joined: 0, companions: 0 },
         attendanceDue: [],
       });
       const own = await mine(a.token);

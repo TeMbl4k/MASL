@@ -116,6 +116,8 @@ export class FakeTelegram {
         return { type: 'web_app', text: 'Открыть', web_app: { url: FAKE_APP_URL } };
       case 'savePreparedKeyboardButton':
         return { id: `prepared-${++this.seq}` };
+      case 'savePreparedInlineMessage':
+        return { id: `prepared-message-${++this.seq}`, expiration_date: 0 };
       case 'createChatInviteLink':
         return {
           invite_link: `https://t.me/+fake${++this.seq}`,

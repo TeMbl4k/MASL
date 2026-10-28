@@ -18,7 +18,7 @@ import { OutboxService } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
-import { KarmaService } from '../karma/karma.service.js';
+import { KarmaService, type DbTransaction } from '../karma/karma.service.js';
 import { LobbiesService } from './lobbies.service.js';
 import { toApplicant, toLobbyCard } from './lobby.mapper.js';
 import {
@@ -54,72 +54,88 @@ export class ApplicationsService {
    */
   async apply(userId: string, lobbyId: string): Promise<{ created: boolean; lobby: LobbyDetailDto }> {
     const now = this.clock.now();
-    return this.db.transaction(async (tx) => {
-      // The user lock serializes this user's applies, so the caps hold under parallel requests.
-      await this.lobbies.lockActor(tx, userId);
-      const viewer = await this.lobbies.viewer(tx, userId, now);
-      if (!viewer.onboarded) throw apiError('not_onboarded');
+    return this.db.transaction((tx) => this.applyIn(tx, userId, lobbyId, now, null));
+  }
 
-      if (!(await lockLobby(tx, lobbyId))) throw apiError('lobby_not_found');
-      const { row, rights, effectiveStatus } = await this.lobbies.visibleLobby(tx, lobbyId, userId, now);
-      if (rights.isHost) throw apiError('own_lobby');
-      if (effectiveStatus === 'cancelled') throw apiError('lobby_cancelled');
-      if (effectiveStatus !== 'open') throw apiError('lobby_closed');
+  /**
+   * The apply step inside the caller's transaction; `inviteId` marks an application made with a
+   * member's invite (stage 6), which passes every check of a plain one. Locks already held by
+   * the caller are taken again harmlessly.
+   */
+  async applyIn(
+    tx: DbTransaction,
+    userId: string,
+    lobbyId: string,
+    now: Date,
+    inviteId: string | null,
+  ): Promise<{ created: boolean; lobby: LobbyDetailDto }> {
+    // The user lock serializes this user's applies, so the caps hold under parallel requests.
+    await this.lobbies.lockActor(tx, userId);
+    const viewer = await this.lobbies.viewer(tx, userId, now);
+    if (!viewer.onboarded) throw apiError('not_onboarded');
 
-      const membership = await lockOwnMembership(tx, lobbyId, userId);
-      if (membership?.status === 'rejected') throw apiError('application_rejected');
-      if (membership?.status === 'cancelled' && membership.decidedAt !== null) {
-        throw apiError('application_left');
-      }
-      if (membership && membership.status !== 'cancelled') {
-        return {
-          created: false,
-          lobby: await this.lobbies.detailFor(tx, { lobbyId, viewerId: userId, now }),
-        };
-      }
+    if (!(await lockLobby(tx, lobbyId))) throw apiError('lobby_not_found');
+    const { row, rights, effectiveStatus } = await this.lobbies.visibleLobby(tx, lobbyId, userId, now);
+    if (rights.isHost) throw apiError('own_lobby');
+    if (effectiveStatus === 'cancelled') throw apiError('lobby_cancelled');
+    if (effectiveStatus !== 'open') throw apiError('lobby_closed');
 
-      if (row.minKarma !== null && !meetsMinKarma(viewer.karma, row.minKarma)) {
-        throw apiError('karma_too_low', { minKarma: row.minKarma, karma: viewer.karma });
-      }
-      if (row.approvedCount >= row.slots) throw apiError('lobby_full');
-      if (viewer.pendingApplications >= APPLICATIONS_PENDING_MAX) throw apiError('pending_limit');
-      if (viewer.applicationsInWindow >= APPLICATIONS_PER_DAY_MAX) {
-        throw apiError('applications_daily_limit');
-      }
+    const membership = await lockOwnMembership(tx, lobbyId, userId);
+    if (membership?.status === 'rejected') throw apiError('application_rejected');
+    if (membership?.status === 'cancelled' && membership.decidedAt !== null) {
+      throw apiError('application_left');
+    }
+    if (membership && membership.status !== 'cancelled') {
+      return {
+        created: false,
+        lobby: await this.lobbies.detailFor(tx, { lobbyId, viewerId: userId, now }),
+      };
+    }
 
-      if (membership) {
-        // A withdrawn application comes back as a new one; decided_at stays null.
-        await tx
-          .update(lobbyMembers)
-          .set({ status: 'pending', appliedAt: now, cancelledAt: null, updatedAt: now })
-          .where(eq(lobbyMembers.id, membership.id));
-      } else {
-        await tx.insert(lobbyMembers).values({
+    if (row.minKarma !== null && !meetsMinKarma(viewer.karma, row.minKarma)) {
+      throw apiError('karma_too_low', { minKarma: row.minKarma, karma: viewer.karma });
+    }
+    if (row.approvedCount >= row.slots) throw apiError('lobby_full');
+    if (!viewer.team && viewer.pendingApplications >= APPLICATIONS_PENDING_MAX) {
+      throw apiError('pending_limit');
+    }
+    if (!viewer.team && viewer.applicationsInWindow >= APPLICATIONS_PER_DAY_MAX) {
+      throw apiError('applications_daily_limit');
+    }
+
+    if (membership) {
+      // A withdrawn application comes back as a new one; decided_at stays null.
+      await tx
+        .update(lobbyMembers)
+        .set({ status: 'pending', appliedAt: now, cancelledAt: null, inviteId, updatedAt: now })
+        .where(eq(lobbyMembers.id, membership.id));
+    } else {
+      await tx.insert(lobbyMembers).values({
+        lobbyId,
+        userId,
+        status: 'pending',
+        appliedAt: now,
+        inviteId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    await tx.insert(applicationEvents).values({ userId, lobbyId, createdAt: now });
+    // Applications arriving close together reach the host as one message.
+    await this.outbox.enqueue(
+      tx,
+      [
+        {
+          kind: 'host_new_applications',
+          userId: row.hostId,
           lobbyId,
-          userId,
-          status: 'pending',
-          appliedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-      await tx.insert(applicationEvents).values({ userId, lobbyId, createdAt: now });
-      // Applications arriving close together reach the host as one message.
-      await this.outbox.enqueue(
-        tx,
-        [
-          {
-            kind: 'host_new_applications',
-            userId: row.hostId,
-            lobbyId,
-            dedupeKey: `host_apps:${lobbyId}`,
-            sendAfter: new Date(now.getTime() + HOST_APPLICATIONS_NOTIFY_DELAY_SECONDS * 1000),
-          },
-        ],
-        now,
-      );
-      return { created: true, lobby: await this.lobbies.detailFor(tx, { lobbyId, viewerId: userId, now }) };
-    });
+          dedupeKey: `host_apps:${lobbyId}`,
+          sendAfter: new Date(now.getTime() + HOST_APPLICATIONS_NOTIFY_DELAY_SECONDS * 1000),
+        },
+      ],
+      now,
+    );
+    return { created: true, lobby: await this.lobbies.detailFor(tx, { lobbyId, viewerId: userId, now }) };
   }
 
   /**

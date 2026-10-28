@@ -1,12 +1,18 @@
-import { Body, Controller, Get, Inject, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Post, Put, UseGuards } from '@nestjs/common';
 import {
   acceptTermsInput,
+  arrivalInput,
+  arrivalResponse,
   meDto,
   onboardingInput,
+  privacyInput,
   updateInterestsInput,
   type AcceptTermsInput,
+  type ArrivalInput,
+  type ArrivalResponse,
   type MeDto,
   type OnboardingInput,
+  type PrivacyInput,
   type UpdateInterestsInput,
 } from '@masl/shared';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
@@ -58,5 +64,31 @@ export class UsersController {
     @Body(new ZodValidationPipe(updateInterestsInput)) body: UpdateInterestsInput,
   ): Promise<MeDto> {
     return this.users.updateInterests(userId, body);
+  }
+
+  /** «Не показывать меня в поиске» and «Приглашения на встречи». */
+  @Put('privacy')
+  @RateLimit('lobbyWrite')
+  @ResponseSchema(meDto)
+  privacy(
+    @CurrentUserId() userId: string,
+    @Body(new ZodValidationPipe(privacyInput)) body: PrivacyInput,
+  ): Promise<MeDto> {
+    return this.users.updatePrivacy(userId, body);
+  }
+
+  /**
+   * The start parameter the app was opened with, sent once after sign-in: a new user's first
+   * link becomes their source. Before onboarding too, so the source isn't lost.
+   */
+  @Post('arrival')
+  @HttpCode(200)
+  @RateLimit('lobbyWrite')
+  @ResponseSchema(arrivalResponse)
+  arrival(
+    @CurrentUserId() userId: string,
+    @Body(new ZodValidationPipe(arrivalInput)) body: ArrivalInput,
+  ): Promise<ArrivalResponse> {
+    return this.users.recordArrival(userId, body.startParam);
   }
 }

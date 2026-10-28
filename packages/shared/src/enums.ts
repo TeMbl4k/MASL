@@ -138,6 +138,9 @@ export const NOTIFICATION_KINDS = [
   'moderator_new_case',
   'user_appeal_approved',
   'user_appeal_rejected',
+  'user_invite',
+  'admin_new_support',
+  'user_support_reply',
   'group_welcome',
   'group_finished',
   'group_cancelled',
@@ -213,6 +216,19 @@ export const API_ERROR_CODES = [
   'user_not_found',
   'self_moderation',
   'admin_only',
+  'admin_section',
+  'person_not_found',
+  'invite_not_allowed',
+  'invites_daily_limit',
+  'lobby_invites_limit',
+  'searches_limit',
+  'invite_not_found',
+  'invite_expired',
+  'invite_answered',
+  'support_daily_limit',
+  'support_not_found',
+  'support_closed',
+  'tag_exists',
   'rate_limited',
   'conflict',
   'invalid_data',
@@ -304,3 +320,41 @@ export type UserRole = (typeof USER_ROLES)[number];
 /** Where the user's latest appeal stands. */
 export const APPEAL_STATUSES = ['open', 'approved', 'rejected'] as const;
 export type AppealStatus = (typeof APPEAL_STATUSES)[number];
+
+/** Where an invite stands in the database; `pending` until the invitee answers. */
+export const INVITE_STATUSES = ['pending', 'accepted', 'declined'] as const;
+export type InviteStatus = (typeof INVITE_STATUSES)[number];
+
+/** An invite as the invitee sees it: a pending one expires at the start, on cancel or when full. */
+export const INVITE_STATES = [...INVITE_STATUSES, 'expired'] as const;
+export type InviteState = (typeof INVITE_STATES)[number];
+
+/**
+ * A search result on the invite screen: can be invited, already invited, already going
+ * (applied or approved), or can't be invited (answered before, rejected, left).
+ */
+export const INVITE_CANDIDATE_STATES = ['available', 'invited', 'going', 'unavailable'] as const;
+export type InviteCandidateState = (typeof INVITE_CANDIDATE_STATES)[number];
+
+/** «Написать нам»: what the request is about. */
+export const SUPPORT_CATEGORIES = ['idea', 'bug', 'question', 'other'] as const;
+export type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
+
+export const SUPPORT_CATEGORY_LABELS: Readonly<Record<SupportCategory, string>> = {
+  idea: 'Идея',
+  bug: 'Ошибка',
+  question: 'Вопрос',
+  other: 'Другое',
+};
+
+/** open: waits for an admin; closed: answered or closed without an answer. */
+export const SUPPORT_STATUSES = ['open', 'closed'] as const;
+export type SupportStatus = (typeof SUPPORT_STATUSES)[number];
+
+/** Periods of the admin statistics. */
+export const STATS_PERIODS = ['7d', '30d', 'all'] as const;
+export type StatsPeriod = (typeof STATS_PERIODS)[number];
+
+/** Where new users came from: a friend's link, an admin's tag, or no link. */
+export const ARRIVAL_SOURCES = ['friends', 'tag', 'none'] as const;
+export type ArrivalSource = (typeof ARRIVAL_SOURCES)[number];

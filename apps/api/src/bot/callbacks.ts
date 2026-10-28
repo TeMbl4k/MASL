@@ -14,7 +14,9 @@ export type BotCallback =
   | { action: 'attendance_toggle'; memberId: string }
   /** Attendance poll: save. */
   | { action: 'attendance_save'; lobbyId: string }
-  | { action: 'feedback'; lobbyId: string; rating: FeedbackRating };
+  | { action: 'feedback'; lobbyId: string; rating: FeedbackRating }
+  /** An invite (stage 6): «Иду», «Не смогу», «Не приглашать меня». */
+  | { action: 'invite_accept' | 'invite_decline' | 'invite_opt_out'; inviteId: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -28,6 +30,18 @@ const LOBBY_ACTIONS = {
 
 type LobbyAction = (typeof LOBBY_ACTIONS)[keyof typeof LOBBY_ACTIONS];
 
+const INVITE_ACTIONS = {
+  'i:y': 'invite_accept',
+  'i:n': 'invite_decline',
+  'i:off': 'invite_opt_out',
+} as const;
+
+type InviteAction = (typeof INVITE_ACTIONS)[keyof typeof INVITE_ACTIONS];
+
+const INVITE_PREFIXES = Object.fromEntries(
+  Object.entries(INVITE_ACTIONS).map(([prefix, action]) => [action, prefix]),
+) as Record<InviteAction, string>;
+
 const LOBBY_PREFIXES = Object.fromEntries(
   Object.entries(LOBBY_ACTIONS).map(([prefix, action]) => [action, prefix]),
 ) as Record<LobbyAction, string>;
@@ -38,6 +52,10 @@ export function encodeCallback(callback: BotCallback): string {
       return `a:t:${callback.memberId}`;
     case 'feedback':
       return `f:${callback.rating}:${callback.lobbyId}`;
+    case 'invite_accept':
+    case 'invite_decline':
+    case 'invite_opt_out':
+      return `${INVITE_PREFIXES[callback.action]}:${callback.inviteId}`;
     default:
       return `${LOBBY_PREFIXES[callback.action]}:${callback.lobbyId}`;
   }
@@ -57,6 +75,8 @@ export function decodeCallback(data: string): BotCallback | null {
       ? { action: 'feedback', lobbyId: id, rating: rating as FeedbackRating }
       : null;
   }
+  const invite = (INVITE_ACTIONS as Record<string, InviteAction>)[prefix];
+  if (invite) return { action: invite, inviteId: id };
   const action = (LOBBY_ACTIONS as Record<string, LobbyAction>)[prefix];
   return action ? { action, lobbyId: id } : null;
 }

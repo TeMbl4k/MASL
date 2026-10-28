@@ -88,7 +88,7 @@ export class ReportsService {
             gt(reports.createdAt, new Date(now.getTime() - REPORTS_WINDOW_HOURS * HOUR_MS)),
           ),
         );
-      if ((sent?.n ?? 0) >= REPORTS_PER_DAY_MAX) throw apiError('reports_daily_limit');
+      if (!reporter.team && (sent?.n ?? 0) >= REPORTS_PER_DAY_MAX) throw apiError('reports_daily_limit');
 
       const subjectId = row.hostId;
       const kase = await this.openReportsCase(tx, subjectId, now);

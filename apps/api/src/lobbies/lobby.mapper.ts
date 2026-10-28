@@ -21,6 +21,7 @@ import {
   type LobbyStatus,
   type MembershipStatus,
   type PersonDto,
+  type PersonRefDto,
   type PublicPlaceDto,
 } from '@masl/shared';
 import { stationById } from '@masl/shared/metro';
@@ -60,8 +61,17 @@ export function toPublicPlace(row: {
   };
 }
 
-export function toPerson(row: { firstName: string; photoUrl: string | null; karma: number }): PersonDto {
-  return { firstName: row.firstName, photoUrl: row.photoUrl, karma: row.karma };
+export function toPerson(row: {
+  code: string;
+  firstName: string;
+  photoUrl: string | null;
+  karma: number;
+}): PersonDto {
+  return { code: row.code, firstName: row.firstName, photoUrl: row.photoUrl, karma: row.karma };
+}
+
+export function toPersonRef(row: { code: string; firstName: string; photoUrl: string | null }): PersonRefDto {
+  return { code: row.code, firstName: row.firstName, photoUrl: row.photoUrl };
 }
 
 export function toExactPlace(row: { address: string; point: GeoPoint }): ExactPlaceDto {
@@ -91,6 +101,7 @@ export function applyBlock(viewer: ViewerContext, lobby: ApplyBlockInput): Apply
   if (membership?.status === 'cancelled' && membership.decidedAt !== null) return 'left';
   if (!meetsMinKarma(viewer.karma, lobby.minKarma)) return 'karma';
   if (lobby.approvedCount >= lobby.slots) return 'full';
+  if (viewer.team) return null;
   if (viewer.pendingApplications >= APPLICATIONS_PENDING_MAX) return 'pending_limit';
   if (viewer.applicationsInWindow >= APPLICATIONS_PER_DAY_MAX) return 'applications_daily_limit';
   return null;
@@ -117,7 +128,12 @@ export function toLobbyCard(row: LobbyCardRow, viewer: ViewerContext, now: Date)
     paymentFormat: row.paymentFormat,
     place: toPublicPlace(row),
     distanceM: row.distanceM === null ? null : roundDistance(row.distanceM),
-    host: toPerson({ firstName: row.hostFirstName, photoUrl: row.hostPhotoUrl, karma: row.hostKarma }),
+    host: toPerson({
+      code: row.hostCode,
+      firstName: row.hostFirstName,
+      photoUrl: row.hostPhotoUrl,
+      karma: row.hostKarma,
+    }),
     viewer: {
       isHost,
       membershipStatus: row.memberStatus,
@@ -188,6 +204,11 @@ export function toDetailExtras(card: LobbyCardDto, row: DetailExtrasRow, now: Da
   };
 }
 
+/** Stage 6 parts of the detail: whether the viewer may invite, and the viewer's own invite. */
+export type DetailInvites = Pick<LobbyDetailDto, 'canInvite' | 'invite'>;
+
+export const NO_INVITES: DetailInvites = { canInvite: false, invite: null };
+
 /** The detail; `exactPlace` exists only for member and host access. */
 export function toLobbyDetail(
   row: LobbyCardRow,
@@ -196,6 +217,7 @@ export function toLobbyDetail(
   access: DetailAccess,
   members: PersonDto[] | null,
   extrasRow: DetailExtrasRow | null = null,
+  invites: DetailInvites = NO_INVITES,
 ): LobbyDetailDto {
   const card = toLobbyCard(row, viewer, now);
   const extras = extrasRow ? toDetailExtras(card, extrasRow, now) : NO_EXTRAS;
@@ -209,6 +231,8 @@ export function toLobbyDetail(
     cancelPolicy: extras.cancelPolicy,
     checkIn: extras.checkIn,
     attendance: extras.attendance,
+    canInvite: invites.canInvite,
+    invite: invites.invite,
   };
   return access.access === 'public'
     ? { ...base, access: 'public' }
@@ -223,11 +247,13 @@ export function toApplicant(row: ApplicantRow, minKarma: number | null): Applica
     appliedAt: row.appliedAt.toISOString(),
     decidedAt: row.decidedAt?.toISOString() ?? null,
     user: {
+      code: row.code,
       firstName: row.firstName,
       photoUrl: row.photoUrl,
       karma: row.karma,
       isNewbie: row.attended < NEWBIE_ATTENDED_MIN,
     },
     meetsMinKarma: meetsMinKarma(row.karma, minKarma),
+    invitedBy: row.invitedBy,
   };
 }

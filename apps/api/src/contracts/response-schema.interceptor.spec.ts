@@ -29,7 +29,7 @@ const card: LobbyCardDto = {
     farFromMetro: false,
   },
   distanceM: 1200,
-  host: { firstName: 'Анна', photoUrl: null, karma: 50 },
+  host: { code: 'a1b2c3d4e5f6', firstName: 'Анна', photoUrl: null, karma: 50 },
   viewer: { isHost: false, membershipStatus: null, applyBlock: null, reported: false },
 };
 

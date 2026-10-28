@@ -8,7 +8,7 @@ import {
   karmaEventsResponse,
   type AuthResponse,
 } from '@masl/shared';
-import { prefixPattern } from '../src/moderation/admin-users.service.js';
+import { prefixPattern } from '../src/lobbies/lobby-queries.js';
 import {
   adminUrl,
   authHeader,

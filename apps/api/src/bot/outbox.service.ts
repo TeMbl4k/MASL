@@ -20,13 +20,18 @@ import { classifyTelegramError, describeTelegramError } from './telegram-errors.
 
 export type OutboxTarget = { userId: string; chatId?: never } | { chatId: number; userId?: never };
 
-/** What the message is about: a lobby, or a moderation case. */
-export type OutboxSubject = { lobbyId: string; caseId?: never } | { caseId: string; lobbyId?: never };
+/** What the message is about: a lobby, a moderation case, or a feedback request. */
+export type OutboxSubject =
+  | { lobbyId: string; caseId?: never; supportId?: never }
+  | { caseId: string; lobbyId?: never; supportId?: never }
+  | { supportId: string; lobbyId?: never; caseId?: never };
 
 export type OutboxMessage = OutboxTarget &
   OutboxSubject & {
     kind: NotificationKind;
     memberId?: string;
+    /** user_invite: the invite, with its lobby as the subject. */
+    inviteId?: string;
     /** Not before this moment; default now. */
     sendAfter?: Date;
     /** At most one pending row per key: a repeat while one waits is dropped (debounce). */
@@ -107,7 +112,9 @@ export class OutboxService implements OnApplicationBootstrap, OnApplicationShutd
           chatId: m.chatId ?? null,
           lobbyId: m.lobbyId ?? null,
           caseId: m.caseId ?? null,
+          supportId: m.supportId ?? null,
           memberId: m.memberId ?? null,
+          inviteId: m.inviteId ?? null,
           kind: m.kind,
           dedupeKey: m.dedupeKey ?? null,
           sendAfter: m.sendAfter ?? now,

@@ -480,8 +480,9 @@ describe.skipIf(!adminUrl)('lobby applications e2e (requires TEST_DATABASE_URL)'
         status: 'pending',
         appliedAt: new Date(base).toISOString(),
         decidedAt: null,
-        user: { firstName: 'Борис', photoUrl: null, karma: 50, isNewbie: true },
+        user: { code: first.user.publicCode, firstName: 'Борис', photoUrl: null, karma: 50, isNewbie: true },
         meetsMinKarma: false,
+        invitedBy: null,
       });
       expect(body.pending[1]).toMatchObject({
         user: { firstName: 'Вера', karma: 60, isNewbie: false },
@@ -492,7 +493,7 @@ describe.skipIf(!adminUrl)('lobby applications e2e (requires TEST_DATABASE_URL)'
       expect(body.rejected.map((a) => a.user.firstName)).toEqual(['Дина']);
       // Q9: no age, gender, ids or usernames of the applicants.
       for (const a of [...body.pending, ...body.approved, ...body.rejected]) {
-        expect(Object.keys(a.user).sort()).toEqual(['firstName', 'isNewbie', 'karma', 'photoUrl']);
+        expect(Object.keys(a.user).sort()).toEqual(['code', 'firstName', 'isNewbie', 'karma', 'photoUrl']);
       }
     });
 
@@ -727,7 +728,7 @@ describe.skipIf(!adminUrl)('lobby applications e2e (requires TEST_DATABASE_URL)'
     expect(bMine).toEqual({
       hosting: { upcoming: [], past: [] },
       joined: { upcoming: [], past: [] },
-      counts: { hosted: 0, joined: 0 },
+      counts: { hosted: 0, joined: 0, companions: 0 },
       attendanceDue: [],
     });
     expect(karmaEventsResponse.parse((await get(b.token, '/api/me/karma-events')).json()).items).toEqual([]);

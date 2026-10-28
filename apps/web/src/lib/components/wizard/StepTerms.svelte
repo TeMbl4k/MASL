@@ -43,7 +43,7 @@
   const preview = $derived(
     user
       ? draft.previewCard(
-          { firstName: user.firstName, photoUrl: user.photoUrl, karma: user.karma },
+          { code: user.publicCode, firstName: user.firstName, photoUrl: user.photoUrl, karma: user.karma },
           normalizeSingleLine(draft.title),
         )
       : null,

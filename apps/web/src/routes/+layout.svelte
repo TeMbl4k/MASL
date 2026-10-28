@@ -1,7 +1,9 @@
 <script lang="ts">
   import './layout.css';
   import { TERMS_VERSION } from '@masl/shared';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { api } from '#lib/api.js';
   import favicon from '#lib/assets/favicon.svg';
   import AppUpdated from '#lib/components/AppUpdated.svelte';
@@ -12,6 +14,7 @@
   import { toast } from '#lib/stores/toast.svelte.js';
   import { mountTelegramUi } from '#lib/tg/index.js';
   import { useBackController } from '#lib/tg/back.svelte.js';
+  import { isReload, launchStartParam, startParamPath } from '#lib/tg/start-param.js';
   import type { LayoutProps } from './$types';
 
   let { children }: LayoutProps = $props();
@@ -24,6 +27,29 @@
 
   $effect(() => {
     if (session.state.status === 'ready') void mountTelegramUi();
+  });
+
+  /** The t.me link the app was opened with: counted as the source, then its page opened once. */
+  let arrivalSent = false;
+  let startOpened = false;
+
+  $effect(() => {
+    if (session.state.status !== 'ready') return;
+    const { termsAccepted, onboarded } = session.state.user;
+    untrack(() => {
+      const startParam = launchStartParam();
+      if (!startParam) return;
+      if (!arrivalSent) {
+        arrivalSent = true;
+        // Only statistics depend on it: a failure is not shown.
+        session.authorized((token) => api.arrival(token, startParam)).catch(() => undefined);
+      }
+      // The page opens after the agreement and onboarding, over the feed the app started on.
+      if (startOpened || !termsAccepted || !onboarded) return;
+      startOpened = true;
+      const path = startParamPath(startParam);
+      if (path && page.url.pathname === '/' && !isReload()) void goto(path);
+    });
   });
 
   async function acceptTerms() {

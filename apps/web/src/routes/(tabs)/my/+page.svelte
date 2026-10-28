@@ -8,6 +8,7 @@
   import ErrorState from '#lib/components/ErrorState.svelte';
   import ChevronDown from '#lib/components/icons/ChevronDown.svelte';
   import ChevronRight from '#lib/components/icons/ChevronRight.svelte';
+  import InvitesBlock from '#lib/components/InvitesBlock.svelte';
   import LobbyCard from '#lib/components/LobbyCard.svelte';
   import LobbyCardSkeleton from '#lib/components/LobbyCardSkeleton.svelte';
   import PageHeader from '#lib/components/PageHeader.svelte';
@@ -103,6 +104,7 @@
     {#snippet heading()}Мои <span class="font-semibold italic">события</span>{/snippet}
   </PageHeader>
   <div class="mt-5 flex flex-col gap-4 px-5">
+    <InvitesBlock />
     <Segmented {options} value={tab} label="Раздел" onchange={switchTab} />
 
     {#if myLobbies.status === 'idle' || myLobbies.status === 'loading'}

@@ -15,16 +15,18 @@
 </script>
 
 {#snippet row(person: PersonDto, role: string | null)}
-  <li class="flex items-center gap-3">
-    <Avatar name={person.firstName} src={person.photoUrl} size={36} />
-    <span class="min-w-0 flex-1 truncate text-[0.9375rem]">
-      {person.firstName}
-      {#if role}<span class="text-[0.8125rem] text-gray-light">· {role}</span>{/if}
-    </span>
-    <span class="flex items-center gap-1 text-sm text-gray-light" aria-label="Карма {person.karma}">
-      <Star size={13} strokeWidth={1.5} class="text-brand" />
-      {person.karma}
-    </span>
+  <li>
+    <a href="/u/{person.code}" class="flex min-h-11 items-center gap-3">
+      <Avatar name={person.firstName} src={person.photoUrl} size={36} />
+      <span class="min-w-0 flex-1 truncate text-[0.9375rem]">
+        {person.firstName}
+        {#if role}<span class="text-[0.8125rem] text-gray-light">· {role}</span>{/if}
+      </span>
+      <span class="flex items-center gap-1 text-sm text-gray-light" aria-label="Карма {person.karma}">
+        <Star size={13} strokeWidth={1.5} class="text-brand" />
+        {person.karma}
+      </span>
+    </a>
   </li>
 {/snippet}
 
@@ -33,7 +35,7 @@
     Участники · {approvedCount} из {slots}
   </h2>
   {#if members}
-    <ul class="flex flex-col gap-2.5">
+    <ul class="flex flex-col gap-1">
       {@render row(host, 'организатор')}
       {#each members as member, index (index)}
         {@render row(member, null)}
