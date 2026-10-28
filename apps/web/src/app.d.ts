@@ -16,9 +16,13 @@ declare global {
         | 'report'
         | 'appeal'
         | 'moderation-action'
-        | 'share';
+        | 'share'
+        | 'new-achievement'
+        | 'tag-qr';
       /** Station id of the open `map-place` sheet. */
       placeKey?: string;
+      /** Link tag id of the open `tag-qr` sheet. */
+      tagId?: number;
     }
     // interface Platform {}
   }

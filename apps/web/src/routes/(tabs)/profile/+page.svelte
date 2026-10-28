@@ -1,10 +1,22 @@
 <script lang="ts">
-  import type { CreationContextDto, PrivacyInput, PublicProfileDto } from '@masl/shared';
+  import {
+    ACHIEVEMENT_TEXTS,
+    ACHIEVEMENTS,
+    type CreationContextDto,
+    type MyAchievementsResponse,
+    type PrivacyInput,
+    type PublicProfileDto,
+  } from '@masl/shared';
   import { onMount } from 'svelte';
+  import { latestEarned } from '#lib/achievements.js';
   import { api } from '#lib/api.js';
+  import AchievementIcon from '#lib/components/achievements/AchievementIcon.svelte';
+  import NextGoal from '#lib/components/achievements/NextGoal.svelte';
   import Avatar from '#lib/components/Avatar.svelte';
   import CreationBlockCard from '#lib/components/CreationBlockCard.svelte';
   import ChevronRight from '#lib/components/icons/ChevronRight.svelte';
+  import Qr from '#lib/components/icons/Qr.svelte';
+  import Upload from '#lib/components/icons/Upload.svelte';
   import InterestsSheet from '#lib/components/InterestsSheet.svelte';
   import KarmaCard from '#lib/components/KarmaCard.svelte';
   import KarmaHistory from '#lib/components/KarmaHistory.svelte';
@@ -24,6 +36,11 @@
   let creation = $state<CreationContextDto | null>(null);
   /** The numbers others see on the public profile. */
   let publicProfile = $state<PublicProfileDto | null>(null);
+  let achievements = $state<MyAchievementsResponse | null>(null);
+  const SHELF_SIZE = 4;
+  const shelf = $derived(achievements ? latestEarned(achievements.items, SHELF_SIZE) : []);
+  const earnedCount = $derived(achievements?.items.filter((item) => item.earnedAt !== null).length ?? 0);
+  const next = $derived(achievements?.items.find((item) => item.id === achievements?.next) ?? null);
   let savingPrivacy = $state(false);
   let metroAttribution = $state<string | null>(null);
 
@@ -35,6 +52,13 @@
         .authorized((token) => api.person(token, code))
         .then(
           (profile) => (publicProfile = profile),
+          () => undefined,
+        );
+      // An extra too: without it the shelf and the friends' numbers are left out.
+      session
+        .authorized((token) => api.myAchievements(token))
+        .then(
+          (mine) => (achievements = mine),
           () => undefined,
         );
     }
@@ -56,7 +80,12 @@
     if (!user || savingPrivacy) return;
     savingPrivacy = true;
     haptic.select();
-    const input = { hideFromSearch: user.hideFromSearch, invitesEnabled: user.invitesEnabled, ...change };
+    const input: PrivacyInput = {
+      hideFromSearch: user.hideFromSearch,
+      invitesEnabled: user.invitesEnabled,
+      newsEnabled: user.newsEnabled,
+      ...change,
+    };
     try {
       session.setUser(await session.authorized((token) => api.updatePrivacy(token, input)));
     } catch (error) {
@@ -91,6 +120,83 @@
           companions={publicProfile.companions}
           companionsHref="/profile/companions"
         />
+      {/if}
+
+      {#if achievements}
+        <section class="flex flex-col gap-3" aria-labelledby="profile-achievements">
+          <div class="flex items-center justify-between gap-3">
+            <h2 id="profile-achievements" class="text-[0.8125rem] tracking-widest text-gray-light uppercase">
+              Ачивки · {earnedCount} из {ACHIEVEMENTS.length}
+            </h2>
+            <a
+              href="/profile/achievements"
+              class="-mr-1 flex min-h-11 items-center gap-0.5 px-1 text-sm text-brand-light"
+              aria-label="Все ачивки"
+            >
+              Все<ChevronRight size={16} />
+            </a>
+          </div>
+          {#if shelf.length > 0}
+            <ul class="grid grid-cols-4 gap-2">
+              {#each shelf as id (id)}
+                <li>
+                  <a href="/profile/achievements" class="flex flex-col items-center gap-1.5">
+                    <AchievementIcon {id} size={56} />
+                    <span class="text-center text-[0.6875rem] leading-tight"
+                      >{ACHIEVEMENT_TEXTS[id].title}</span
+                    >
+                  </a>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          {#if next}
+            <NextGoal item={next} label="Следующая" href="/profile/achievements" />
+          {/if}
+        </section>
+
+        <section
+          class="flex flex-col gap-3 rounded-3xl border border-gray-dark bg-linear-135 from-brand/15 to-gray-dark/40 to-70% p-4"
+          aria-labelledby="profile-friends"
+        >
+          <h2 id="profile-friends" class="text-lg font-semibold">Пригласить друзей</h2>
+          <p class="text-sm leading-relaxed text-gray-light">
+            Когда друг по вашей ссылке впервые сходит на встречу, вы получите ачивку.
+          </p>
+          <dl class="grid grid-cols-2 gap-2">
+            <div class="flex flex-col-reverse gap-0.5 rounded-xl bg-ink/40 px-3 py-2.5">
+              <dt class="text-xs text-gray-light">пришли по ссылке</dt>
+              <dd class="text-xl font-semibold">{achievements.friends.arrived}</dd>
+            </div>
+            <div class="flex flex-col-reverse gap-0.5 rounded-xl bg-ink/40 px-3 py-2.5">
+              <dt class="text-xs text-gray-light">дошли до встречи</dt>
+              <dd class="text-xl font-semibold">{achievements.friends.reached}</dd>
+            </div>
+          </dl>
+          <div class="grid grid-cols-2 gap-2">
+            <a
+              href="/profile/card"
+              class="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-brand text-[0.9375rem] font-semibold text-paper"
+            >
+              <Qr size={18} />Моя визитка
+            </a>
+            <button
+              type="button"
+              class="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-gray-dark bg-gray-dark/40 text-[0.9375rem]"
+              onclick={() => void openSheet('share')}
+            >
+              <Upload size={18} />Поделиться
+            </button>
+          </div>
+        </section>
+      {:else}
+        <button
+          type="button"
+          class="min-h-12 rounded-2xl border border-gray-dark text-[0.9375rem]"
+          onclick={() => void openSheet('share')}
+        >
+          Поделиться профилем
+        </button>
       {/if}
 
       {#if creation?.reason === 'blocked'}
@@ -146,17 +252,9 @@
 
       <KarmaHistory />
 
-      <button
-        type="button"
-        class="min-h-12 rounded-2xl border border-gray-dark text-[0.9375rem]"
-        onclick={() => void openSheet('share')}
-      >
-        Поделиться профилем
-      </button>
-
       <section class="flex flex-col gap-2" aria-labelledby="profile-privacy">
         <h2 id="profile-privacy" class="text-[0.8125rem] tracking-widest text-gray-light uppercase">
-          Приватность
+          Приватность и уведомления
         </h2>
         {@render toggle(
           'Показывать меня в поиске',
@@ -169,6 +267,12 @@
           'Если выключить, пригласить вас не сможет никто.',
           user.invitesEnabled,
           () => void setPrivacy({ invitesEnabled: !user.invitesEnabled }),
+        )}
+        {@render toggle(
+          'Новости MASL',
+          'Не чаще раза в день. Заявки, адреса и приглашения приходят всегда.',
+          user.newsEnabled,
+          () => void setPrivacy({ newsEnabled: !user.newsEnabled }),
         )}
       </section>
 

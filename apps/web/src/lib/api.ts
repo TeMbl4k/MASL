@@ -1,4 +1,5 @@
 import {
+  achievementsSeenResponse,
   adminCancelLobbyResponse,
   adminCaseDto,
   adminCasesResponse,
@@ -10,12 +11,17 @@ import {
   adminUserSearchResponse,
   appealStateDto,
   arrivalResponse,
+  broadcastAudienceDto,
+  broadcastsResponse,
+  broadcastTestResponse,
   companionsResponse,
   inviteAnswerResponse,
   inviteCandidatesResponse,
   linkTagsResponse,
+  myAchievementsResponse,
   myInvitesResponse,
   publicProfileDto,
+  qrPrintResponse,
   sendInvitesResponse,
   shareResponse,
   supportResponse,
@@ -38,6 +44,7 @@ import {
   type AdminStatsQuery,
   type AdminSupportQuery,
   type AuthResponse,
+  type BroadcastInput,
   type InviteCandidatesQuery,
   type LinkTagInput,
   type PrivacyInput,
@@ -266,6 +273,14 @@ export const api = {
   sendSupport: (token: string, input: SupportInput) =>
     parsed(supportResponse, request('/me/support', { method: 'POST', token, body: JSON.stringify(input) })),
 
+  // Stage 7: achievements, friends and the QR card.
+  myAchievements: (token: string, signal?: AbortSignal) =>
+    parsed(myAchievementsResponse, request('/me/achievements', { token, signal })),
+  markAchievementsSeen: (token: string) =>
+    parsed(achievementsSeenResponse, request('/me/achievements/seen', { method: 'POST', token, body: '{}' })),
+  printCard: (token: string) =>
+    parsed(qrPrintResponse, request('/me/card/print', { method: 'POST', token, body: '{}' })),
+
   // Moderation: moderators and admins only (the API checks the role on every call).
   adminCases: (token: string, query: Partial<AdminCasesQuery>, signal?: AbortSignal) =>
     parsed(adminCasesResponse, request(`/admin/cases${qs(query)}`, { token, signal })),
@@ -308,6 +323,30 @@ export const api = {
     parsed(linkTagsResponse, request('/admin/tags', { token, signal })),
   createLinkTag: (token: string, input: LinkTagInput) =>
     parsed(linkTagsResponse, request('/admin/tags', { method: 'POST', token, body: JSON.stringify(input) })),
+  printTag: (token: string, id: number) =>
+    parsed(qrPrintResponse, request(`/admin/tags/${id}/print`, { method: 'POST', token, body: '{}' })),
+  broadcasts: (token: string, signal?: AbortSignal) =>
+    parsed(broadcastsResponse, request('/admin/broadcasts', { token, signal })),
+  broadcastAudience: (token: string, interests: string[] | null, signal?: AbortSignal) =>
+    parsed(
+      broadcastAudienceDto,
+      request('/admin/broadcasts/audience', {
+        method: 'POST',
+        token,
+        signal,
+        body: JSON.stringify({ interests }),
+      }),
+    ),
+  testBroadcast: (token: string, input: BroadcastInput) =>
+    parsed(
+      broadcastTestResponse,
+      request('/admin/broadcasts/test', { method: 'POST', token, body: JSON.stringify(input) }),
+    ),
+  sendBroadcast: (token: string, input: BroadcastInput) =>
+    parsed(
+      broadcastsResponse,
+      request('/admin/broadcasts', { method: 'POST', token, body: JSON.stringify(input) }),
+    ),
 
   // POST: the typed address and the exact pin stay out of URLs and so out of access logs.
   placeSuggest: (token: string, q: string, signal?: AbortSignal) =>

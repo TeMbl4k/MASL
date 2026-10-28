@@ -10,19 +10,24 @@
     type TeamMemberDto,
   } from '@masl/shared';
   import { onDestroy, untrack } from 'svelte';
+  import { page } from '$app/state';
   import { api, ApiError } from '#lib/api.js';
   import EmptyState from '#lib/components/EmptyState.svelte';
   import ErrorState from '#lib/components/ErrorState.svelte';
   import Copy from '#lib/components/icons/Copy.svelte';
+  import Qr from '#lib/components/icons/Qr.svelte';
   import Search from '#lib/components/icons/Search.svelte';
   import AdminTabs from '#lib/components/moderation/AdminTabs.svelte';
   import PageHeader from '#lib/components/PageHeader.svelte';
+  import QrImage from '#lib/components/QrImage.svelte';
+  import Sheet from '#lib/components/Sheet.svelte';
   import { describeError, isAbort } from '#lib/errors.js';
   import { formatShortDate } from '#lib/format/datetime.js';
   import { ROLE_LABELS } from '#lib/format/labels.js';
   import { session } from '#lib/session.svelte.js';
   import { appActivity } from '#lib/stores/clock.svelte.js';
   import { toast } from '#lib/stores/toast.svelte.js';
+  import { closeSheet, openSheet } from '#lib/tg/back.svelte.js';
   import { haptic } from '#lib/tg/haptics.js';
   import { copyText } from '#lib/tg/links.js';
   import { confirm } from '#lib/tg/popup.js';
@@ -44,6 +49,12 @@
 
   let slug = $state('');
   let title = $state('');
+
+  /** The tag of the open QR sheet. */
+  const qrTag = $derived(
+    page.state.sheet === 'tag-qr' ? (tags?.find((tag) => tag.id === page.state.tagId) ?? null) : null,
+  );
+  let printing = $state(false);
 
   onDestroy(() => {
     clearTimeout(searchTimer);
@@ -149,6 +160,21 @@
     }
   }
 
+  async function printTag(id: number): Promise<void> {
+    if (printing) return;
+    printing = true;
+    try {
+      await session.authorized((token) => api.printTag(token, id));
+      haptic.success();
+      toast.show('Бот прислал файл в чат', 'success');
+      closeSheet();
+    } catch (error) {
+      toast.error(error);
+    } finally {
+      printing = false;
+    }
+  }
+
   async function copy(link: string): Promise<void> {
     if (await copyText(link)) {
       haptic.success();
@@ -198,9 +224,8 @@
                   <span class="font-semibold">Telegram ID {member.telegramId}</span>
                 {/if}
                 <span class="text-[0.8125rem] text-gray-light">
-                  {ROLE_LABELS[member.role]}{#if member.role === 'admin'}
-                    · из настроек сервера{#if !member.user}, ещё не заходил{/if}{:else if member.since}
-                    · с {formatShortDate(member.since)}{/if}
+                  {ROLE_LABELS[member.role]}{#if member.role === 'admin'}{' · '}из настроек сервера{#if !member.user}{', ещё не заходил'}{/if}{:else if member.since}{' · '}с
+                    {formatShortDate(member.since)}{/if}
                 </span>
               </span>
               {#if member.role === 'moderator' && member.user}
@@ -316,7 +341,7 @@
                 <span class="flex min-w-0 flex-1 flex-col">
                   <span class="truncate font-semibold">{tag.title}</span>
                   <span class="text-[0.8125rem] text-gray-light">
-                    {tag.slug} · пришло {tag.arrivals}
+                    {tag.slug} · пришли {tag.arrivals}{#if tag.arrivals > 0}, до встречи {tag.attended}{/if}
                   </span>
                 </span>
                 {#if tag.link}
@@ -329,6 +354,14 @@
                   >
                     <Copy size={18} />
                   </button>
+                  <button
+                    type="button"
+                    aria-label="QR метки {tag.title}"
+                    class="flex size-11 items-center justify-center rounded-xl border border-gray-dark"
+                    onclick={() => void openSheet('tag-qr', { tagId: tag.id })}
+                  >
+                    <Qr size={18} />
+                  </button>
                 {/if}
               </li>
             {/each}
@@ -338,3 +371,36 @@
     {/if}
   </div>
 </main>
+
+<Sheet name="tag-qr" title={qrTag?.title ?? 'QR метки'}>
+  {#if qrTag?.link}
+    {@const tag = qrTag}
+    {@const link = qrTag.link}
+    <div class="flex flex-col items-center gap-3.5">
+      <QrImage text={link} size={200} label="QR-код ссылки метки {tag.title}" />
+      <p class="text-center text-[0.8125rem] text-gray-light">
+        Ведёт в ленту, новые люди записываются на эту метку
+      </p>
+      <div class="grid grid-cols-2 gap-2.5 self-stretch">
+        <button
+          type="button"
+          class="min-h-13 rounded-2xl border border-gray-dark bg-gray-dark/40 text-[0.9375rem]"
+          onclick={() => void copy(link)}
+        >
+          Скопировать ссылку
+        </button>
+        <button
+          type="button"
+          class="min-h-13 rounded-2xl bg-brand text-[0.9375rem] font-semibold text-paper disabled:opacity-60"
+          disabled={printing}
+          aria-busy={printing}
+          onclick={() => void printTag(tag.id)}
+        >
+          Прислать для печати
+        </button>
+      </div>
+    </div>
+  {:else}
+    <p class="text-sm text-gray-light">Метка не найдена</p>
+  {/if}
+</Sheet>

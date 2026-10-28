@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
   import { page } from '$app/state';
   import { api, ApiError } from '#lib/api.js';
+  import AchievementBadges from '#lib/components/achievements/AchievementBadges.svelte';
   import Avatar from '#lib/components/Avatar.svelte';
   import ErrorState from '#lib/components/ErrorState.svelte';
   import KarmaBadge from '#lib/components/KarmaBadge.svelte';
@@ -96,6 +97,10 @@
         companions={shown.companions}
         companionsHref={shown.isSelf ? '/profile/companions' : undefined}
       />
+
+      {#if shown.achievements.length > 0}
+        <AchievementBadges items={shown.achievements} />
+      {/if}
 
       {#if interests.length > 0}
         <section class="flex flex-col gap-3" aria-labelledby="person-interests">

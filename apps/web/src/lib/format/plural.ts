@@ -20,3 +20,4 @@ export function plural(n: number, forms: PluralForms): string {
 export const LOBBY_FORMS: PluralForms = ['встреча', 'встречи', 'встреч'];
 export const APPLICATION_FORMS: PluralForms = ['заявка', 'заявки', 'заявок'];
 export const NEW_APPLICATION_FORMS: PluralForms = ['новая заявка', 'новые заявки', 'новых заявок'];
+export const ACHIEVEMENT_FORMS: PluralForms = ['ачивка', 'ачивки', 'ачивок'];

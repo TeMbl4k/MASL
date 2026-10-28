@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    ACHIEVEMENT_TEXTS,
     APPLICATIONS_PENDING_MAX,
     effectiveLobbyStatus,
     formatMoscowTime,
@@ -14,6 +15,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { api, ApiError } from '#lib/api.js';
+  import AchievementIcon from '#lib/components/achievements/AchievementIcon.svelte';
   import Avatar from '#lib/components/Avatar.svelte';
   import BottomAction from '#lib/components/BottomAction.svelte';
   import CancelLobbySheet from '#lib/components/CancelLobbySheet.svelte';
@@ -57,6 +59,7 @@
   const id = $derived(page.params.id ?? '');
   const entry = $derived(lobbyCache.get(id));
   const detail = $derived(entry?.detail);
+  const hostBadges = $derived(detail?.hostBadges ?? []);
   /** The cached card renders first; the detail fills in the rest. */
   const lobby = $derived<LobbyCardDto | undefined>(detail ?? entry?.card);
   const status = $derived<LobbyStatus | null>(lobby ? effectiveLobbyStatus(lobby, clock.now) : null);
@@ -477,19 +480,34 @@
 
       <a
         href="/u/{lobby.host.code}"
-        aria-label="Организатор: {lobby.host.firstName}, карма {lobby.host.karma}"
-        class="flex items-center gap-3 rounded-[1.125rem] border border-gray-dark bg-gray-dark/40 p-3.5"
+        aria-label="Организатор: {lobby.host.firstName}, карма {lobby.host.karma}{hostBadges.length
+          ? `, ${hostBadges.map((id) => ACHIEVEMENT_TEXTS[id].title).join(', ')}`
+          : ''}"
+        class="flex flex-col gap-3 rounded-[1.125rem] border border-gray-dark bg-gray-dark/40 p-3.5"
       >
-        <Avatar name={lobby.host.firstName} src={lobby.host.photoUrl} size={44} />
-        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span class="text-xs tracking-widest text-gray-light uppercase">Организатор</span>
-          <span class="truncate font-semibold">{lobby.host.firstName}</span>
-        </div>
-        <span class="flex items-center gap-1 font-semibold" aria-label="Карма {lobby.host.karma}">
-          <Star size={16} strokeWidth={1.5} class="text-brand" />
-          {lobby.host.karma}
+        <span class="flex items-center gap-3">
+          <Avatar name={lobby.host.firstName} src={lobby.host.photoUrl} size={44} />
+          <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span class="text-xs tracking-widest text-gray-light uppercase">Организатор</span>
+            <span class="truncate font-semibold">{lobby.host.firstName}</span>
+          </span>
+          <span class="flex items-center gap-1 font-semibold">
+            <Star size={16} strokeWidth={1.5} class="text-brand" />
+            {lobby.host.karma}
+          </span>
+          <ChevronRight size={18} class="text-gray-light" />
         </span>
-        <ChevronRight size={18} class="text-gray-light" />
+        {#if hostBadges.length > 0}
+          <span class="flex flex-wrap gap-2" aria-hidden="true">
+            {#each hostBadges as id (id)}
+              <span
+                class="flex items-center gap-1.5 rounded-full border border-brand/50 bg-brand/15 py-1 pr-2.5 pl-1 text-[0.8125rem]"
+              >
+                <AchievementIcon {id} size={22} />{ACHIEVEMENT_TEXTS[id].title}
+              </span>
+            {/each}
+          </span>
+        {/if}
       </a>
 
       {#if status === 'open'}

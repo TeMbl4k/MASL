@@ -7,6 +7,7 @@
     { href: '/admin/stats', label: 'Статистика' },
     { href: '/admin/support', label: 'Обращения' },
     { href: '/admin/team', label: 'Команда и метки' },
+    { href: '/admin/broadcasts', label: 'Рассылки' },
   ] as const;
 
   // Moderators see only the cases; the API checks the role on every admin call anyway.

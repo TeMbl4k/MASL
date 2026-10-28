@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NewAchievementSheet from '#lib/components/achievements/NewAchievementSheet.svelte';
   import TabBar from '#lib/components/TabBar.svelte';
   import { useRefreshWhenActive } from '#lib/stores/clock.svelte.js';
   import { myLobbies } from '#lib/stores/my-lobbies.svelte.js';
@@ -15,3 +16,4 @@
   {@render children()}
 </div>
 <TabBar />
+<NewAchievementSheet />
