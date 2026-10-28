@@ -248,8 +248,13 @@ describe.skipIf(!adminUrl)('profiles, companions and sharing e2e (requires TEST_
     const response = await send('PUT', a.token, '/api/me/privacy', {
       hideFromSearch: true,
       invitesEnabled: false,
+      newsEnabled: false,
       userId: crypto.randomUUID(),
     });
-    expect(meDto.parse(response.json())).toMatchObject({ hideFromSearch: true, invitesEnabled: false });
+    expect(meDto.parse(response.json())).toMatchObject({
+      hideFromSearch: true,
+      invitesEnabled: false,
+      newsEnabled: false,
+    });
   });
 });

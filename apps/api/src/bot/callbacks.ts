@@ -16,7 +16,11 @@ export type BotCallback =
   | { action: 'attendance_save'; lobbyId: string }
   | { action: 'feedback'; lobbyId: string; rating: FeedbackRating }
   /** An invite (stage 6): «Иду», «Не смогу», «Не приглашать меня». */
-  | { action: 'invite_accept' | 'invite_decline' | 'invite_opt_out'; inviteId: string };
+  | { action: 'invite_accept' | 'invite_decline' | 'invite_opt_out'; inviteId: string }
+  /** «Отписаться от новостей» under a broadcast (stage 7); null under an admin's test. */
+  | { action: 'news_off'; broadcastId: string | null };
+
+const NEWS_OFF = 'n:off';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -56,6 +60,8 @@ export function encodeCallback(callback: BotCallback): string {
     case 'invite_decline':
     case 'invite_opt_out':
       return `${INVITE_PREFIXES[callback.action]}:${callback.inviteId}`;
+    case 'news_off':
+      return callback.broadcastId ? `${NEWS_OFF}:${callback.broadcastId}` : NEWS_OFF;
     default:
       return `${LOBBY_PREFIXES[callback.action]}:${callback.lobbyId}`;
   }
@@ -63,12 +69,14 @@ export function encodeCallback(callback: BotCallback): string {
 
 /** The callback, or null for data this bot never sends (old or forged buttons). */
 export function decodeCallback(data: string): BotCallback | null {
+  if (data === NEWS_OFF) return { action: 'news_off', broadcastId: null };
   const cut = data.lastIndexOf(':');
   if (cut < 0) return null;
   const prefix = data.slice(0, cut);
   const id = data.slice(cut + 1);
   if (!UUID.test(id)) return null;
   if (prefix === 'a:t') return { action: 'attendance_toggle', memberId: id };
+  if (prefix === NEWS_OFF) return { action: 'news_off', broadcastId: id };
   if (prefix.startsWith('f:')) {
     const rating = prefix.slice(2);
     return (FEEDBACK_RATINGS as readonly string[]).includes(rating)

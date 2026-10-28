@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Bot } from 'grammy';
 import type { InlineKeyboardButton } from 'grammy/types';
-import { startAppLink } from '@masl/shared';
+import { buildStartParam, startAppLink } from '@masl/shared';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { BOT } from './bot.provider.js';
 
@@ -14,6 +14,7 @@ export const appPaths = {
   applications: (lobbyId: string) => `/lobby/${lobbyId}/manage`,
   attendance: (lobbyId: string) => `/lobby/${lobbyId}/attendance`,
   profile: () => '/profile',
+  achievements: () => '/profile/achievements',
   invites: () => '/my/invites',
   feedback: () => '/feedback',
   adminSupport: () => '/admin/support',
@@ -52,6 +53,18 @@ export class AppLinks {
       return null;
     }
     return startAppLink(this.bot.botInfo.username, startParam);
+  }
+
+  /** The QR card's link: the person's profile with themselves as the source of new friends. */
+  profileLink(code: string): Promise<string | null> {
+    return this.startLink(
+      buildStartParam({ target: { kind: 'profile', code }, source: { kind: 'ref', code } }),
+    );
+  }
+
+  /** A link tag's link: the feed, with the tag as the source of new users. */
+  tagLink(slug: string): Promise<string | null> {
+    return this.startLink(buildStartParam({ target: { kind: 'feed' }, source: { kind: 'tag', slug } }));
   }
 
   private async base(): Promise<string | null> {

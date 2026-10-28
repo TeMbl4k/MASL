@@ -218,6 +218,7 @@ export function toLobbyDetail(
   members: PersonDto[] | null,
   extrasRow: DetailExtrasRow | null = null,
   invites: DetailInvites = NO_INVITES,
+  hostBadges: LobbyDetailDto['hostBadges'] = [],
 ): LobbyDetailDto {
   const card = toLobbyCard(row, viewer, now);
   const extras = extrasRow ? toDetailExtras(card, extrasRow, now) : NO_EXTRAS;
@@ -233,6 +234,7 @@ export function toLobbyDetail(
     attendance: extras.attendance,
     canInvite: invites.canInvite,
     invite: invites.invite,
+    hostBadges,
   };
   return access.access === 'public'
     ? { ...base, access: 'public' }

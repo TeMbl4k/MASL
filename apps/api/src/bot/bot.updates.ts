@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { BotError, GrammyError, HttpError, type Bot, type Context } from 'grammy';
 import { users, type Database } from '@masl/db';
+import { BroadcastsService } from '../broadcasts/broadcasts.service.js';
 import { RATE_LIMITS } from '@masl/shared';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { DB } from '../db/db.module.js';
@@ -40,6 +41,7 @@ export class BotUpdates implements OnModuleInit {
     @Inject(AttendanceService) private readonly attendance: AttendanceService,
     @Inject(FeedbackService) private readonly feedback: FeedbackService,
     @Inject(InvitesService) private readonly invites: InvitesService,
+    @Inject(BroadcastsService) private readonly broadcasts: BroadcastsService,
     @Inject(FixedWindowStore) private readonly limits: FixedWindowStore,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -220,6 +222,20 @@ export class BotUpdates implements OnModuleInit {
         await ctx.editMessageText(`${original}\n\n${answer}`, {
           reply_markup: open ? { inline_keyboard: [[open]] } : undefined,
         });
+        return;
+      }
+      case 'news_off': {
+        const changed = await this.broadcasts.unsubscribe(userId, callback.broadcastId);
+        await ctx.answerCallbackQuery(changed ? undefined : { text: texts.newsOffAlready });
+        // The broadcast keeps its action button; the unsubscribe one is spent.
+        const rows = message?.reply_markup?.inline_keyboard ?? [];
+        const kept = rows.filter(
+          (row) => !row.some((b) => 'callback_data' in b && b.callback_data === ctx.callbackQuery?.data),
+        );
+        await ctx
+          .editMessageReplyMarkup({ reply_markup: kept.length ? { inline_keyboard: kept } : undefined })
+          .catch(() => undefined);
+        if (changed) await ctx.reply(texts.newsOffDone);
         return;
       }
     }

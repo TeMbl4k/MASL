@@ -13,6 +13,7 @@ import {
   type AttendanceResponse,
   type LobbyDetailDto,
 } from '@masl/shared';
+import { AchievementsService } from '../achievements/achievements.service.js';
 import { loadPollMembers, type AttendancePollMember } from '../bot/outbox.renderer.js';
 import { OutboxService, type OutboxMessage } from '../bot/outbox.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
@@ -35,6 +36,7 @@ export class AttendanceService {
     @Inject(LobbiesService) private readonly lobbies: LobbiesService,
     @Inject(KarmaService) private readonly karma: KarmaService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(AchievementsService) private readonly achievements: AchievementsService,
   ) {}
 
   /**
@@ -128,7 +130,8 @@ export class AttendanceService {
 
   /**
    * The scheduler's close, ATTENDANCE_CLOSE_HOURS_AFTER after the end. When the host never
-   * saved, members who checked in count as attended; the rest get nothing, nor does the host.
+   * saved, members who checked in count as attended; the rest get nothing, nor does the host's
+   * karma (their achievements still count the meetup as held).
    */
   async closeExpired(tx: DbTransaction, now: Date): Promise<OutboxMessage[]> {
     const closed = await tx
@@ -141,7 +144,7 @@ export class AttendanceService {
           lte(lobbies.endsAt, new Date(now.getTime() - ATTENDANCE_CLOSE_HOURS_AFTER * HOUR_MS)),
         ),
       )
-      .returning({ id: lobbies.id, savedAt: lobbies.attendanceSavedAt });
+      .returning({ id: lobbies.id, hostId: lobbies.hostId, savedAt: lobbies.attendanceSavedAt });
     const messages: OutboxMessage[] = [];
     for (const lobby of closed) {
       if (lobby.savedAt !== null) continue;
@@ -160,6 +163,8 @@ export class AttendanceService {
       for (const member of checkedIn) {
         messages.push(...(await this.mark(tx, lobby.id, member, false, now)));
       }
+      const attended = checkedIn.map((m) => ({ memberId: m.id, userId: m.userId }));
+      messages.push(...(await this.achievements.afterAttendance(tx, lobby.id, lobby.hostId, attended, now)));
     }
     return messages;
   }
@@ -196,7 +201,10 @@ export class AttendanceService {
       for (const member of members) {
         messages.push(...(await this.mark(tx, lobbyId, member, absent.has(member.id), now)));
       }
-      if (members.some((m) => !absent.has(m.id))) {
+      const attended = members
+        .filter((m) => !absent.has(m.id))
+        .map((m) => ({ memberId: m.id, userId: m.userId }));
+      if (attended.length > 0) {
         await this.karma.apply(tx, {
           userId: hostId,
           lobbyId,
@@ -206,6 +214,7 @@ export class AttendanceService {
         });
       }
       await tx.update(lobbies).set({ attendanceSavedAt: now, updatedAt: now }).where(eq(lobbies.id, lobbyId));
+      messages.push(...(await this.achievements.afterAttendance(tx, lobbyId, hostId, attended, now)));
       await this.outbox.enqueue(tx, messages, now);
       return this.attendanceOf(tx, lobbyId, hostId, now);
     });
