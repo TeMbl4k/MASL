@@ -75,6 +75,12 @@ export const MODERATION_HISTORY_LIMIT = 50;
 export const INTERESTS_MIN = 3;
 export const INTERESTS_MAX = 5;
 
+/**
+ * Version of the user agreement the app asks to accept. Raise it only for a material change:
+ * everyone who accepted an older version is asked again on the next sign-in.
+ */
+export const TERMS_VERSION = 1;
+
 /** Allowed age at onboarding (bars and adult meetups: 18+). */
 export const AGE_MIN = 18;
 export const AGE_MAX = 99;

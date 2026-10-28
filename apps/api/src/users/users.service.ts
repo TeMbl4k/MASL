@@ -1,7 +1,14 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { asc, eq, sql, type SQLWrapper } from 'drizzle-orm';
+import { and, asc, eq, isNull, ne, or, sql, type SQLWrapper } from 'drizzle-orm';
 import { userInterests, users, type Database, type User } from '@masl/db';
-import type { MeDto, OnboardingInput, UpdateInterestsInput, UserRole } from '@masl/shared';
+import {
+  TERMS_VERSION,
+  type AcceptTermsInput,
+  type MeDto,
+  type OnboardingInput,
+  type UpdateInterestsInput,
+  type UserRole,
+} from '@masl/shared';
 import type { TelegramIdentity } from '../auth/init-data.service.js';
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
@@ -10,6 +17,7 @@ import { apiError } from '../errors/api-error.js';
 import type { DbTransaction } from '../karma/karma.service.js';
 import { countOpenCases } from '../moderation/admin-queries.js';
 import { userRole } from '../moderation/roles.js';
+import { termsAccepted } from './terms.js';
 
 @Injectable()
 export class UsersService {
@@ -70,23 +78,54 @@ export class UsersService {
   }
 
   /**
-   * 403 `not_onboarded` unless the user finished onboarding; the flag is read fresh from the DB.
+   * 403 `not_onboarded` unless the user finished onboarding, `terms_not_accepted` unless the
+   * current user agreement is accepted; both read fresh from the DB.
    * Inside `tx` the user row is also locked (FOR NO KEY UPDATE), the first lock of the call.
    */
   async requireOnboarded(userId: string, tx?: DbTransaction): Promise<void> {
     const query = (tx ?? this.db)
-      .select({ onboardedAt: users.onboardedAt })
+      .select({ onboardedAt: users.onboardedAt, termsVersion: users.termsVersion })
       .from(users)
       .where(eq(users.id, userId));
     const [user] = tx ? await query.for('no key update') : await query;
     if (!user?.onboardedAt) {
       throw apiError('not_onboarded');
     }
+    if (!termsAccepted(user)) {
+      throw apiError('terms_not_accepted');
+    }
+  }
+
+  /**
+   * Accepts the current user agreement. A repeat keeps the first acceptance time; a version
+   * other than TERMS_VERSION (an app opened before the agreement changed) answers 409.
+   */
+  async acceptTerms(userId: string, input: AcceptTermsInput): Promise<MeDto> {
+    if (input.version !== TERMS_VERSION) {
+      throw apiError('terms_outdated');
+    }
+    const now = this.clock.now();
+    await this.db
+      .update(users)
+      .set({ termsVersion: TERMS_VERSION, termsAcceptedAt: now, updatedAt: now })
+      .where(
+        and(eq(users.id, userId), or(isNull(users.termsVersion), ne(users.termsVersion, TERMS_VERSION))),
+      );
+    return this.getMe(userId);
   }
 
   async completeOnboarding(userId: string, input: OnboardingInput, now: Date = new Date()): Promise<MeDto> {
     const birthYear = now.getUTCFullYear() - input.age;
     await this.db.transaction(async (tx) => {
+      // Profile data is asked for only after the agreement is accepted.
+      const [user] = await tx
+        .select({ termsVersion: users.termsVersion })
+        .from(users)
+        .where(eq(users.id, userId))
+        .for('no key update');
+      if (user && !termsAccepted(user)) {
+        throw apiError('terms_not_accepted');
+      }
       const updated = await tx
         .update(users)
         .set({
@@ -134,6 +173,7 @@ export class UsersService {
       karma: user.karma,
       interests: interestSlugs,
       onboarded: user.onboardedAt !== null,
+      termsAccepted: termsAccepted(user),
       botCanWrite: user.allowsWriteToPm,
       role,
       moderationQueue,

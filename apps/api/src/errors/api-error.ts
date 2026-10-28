@@ -30,6 +30,8 @@ type MessageMap = {
 
 export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, HttpStatus>> = {
   not_onboarded: HttpStatus.FORBIDDEN,
+  terms_not_accepted: HttpStatus.FORBIDDEN,
+  terms_outdated: HttpStatus.CONFLICT,
   creation_blocked: HttpStatus.FORBIDDEN,
   daily_limit: HttpStatus.TOO_MANY_REQUESTS,
   upcoming_limit: HttpStatus.TOO_MANY_REQUESTS,
@@ -86,6 +88,8 @@ export const API_ERROR_STATUS: Readonly<Record<ApiErrorCode, HttpStatus>> = {
  */
 const MESSAGES: MessageMap = {
   not_onboarded: 'Сначала заполните профиль',
+  terms_not_accepted: 'Сначала примите пользовательское соглашение',
+  terms_outdated: 'Соглашение обновилось. Откройте приложение заново, чтобы прочитать новую версию',
   creation_blocked: ({ kind }) => `${CREATION_BLOCKED_TITLES[kind]}. ${CREATION_BLOCKED_APPEAL}`,
   daily_limit: ({ newbie, retryAt, now }) =>
     newbie

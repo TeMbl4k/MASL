@@ -168,6 +168,8 @@ export type AttendanceState = (typeof ATTENDANCE_STATES)[number];
  */
 export const API_ERROR_CODES = [
   'not_onboarded',
+  'terms_not_accepted',
+  'terms_outdated',
   'creation_blocked',
   'daily_limit',
   'upcoming_limit',

@@ -121,6 +121,8 @@ export const api = {
     request<AuthResponse>('/auth/telegram', { method: 'POST', body: JSON.stringify({ initData }) }),
   me: (token: string) => request<MeDto>('/me', { token }),
   interests: () => request<InterestDto[]>('/interests'),
+  acceptTerms: (token: string, version: number) =>
+    parsed(meDto, request('/me/terms', { method: 'PUT', token, body: JSON.stringify({ version }) })),
   completeOnboarding: (token: string, input: OnboardingInput) =>
     request<MeDto>('/me/onboarding', { method: 'PUT', token, body: JSON.stringify(input) }),
 

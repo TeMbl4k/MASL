@@ -1,9 +1,12 @@
 <script lang="ts">
   import './layout.css';
+  import { TERMS_VERSION } from '@masl/shared';
   import { onMount } from 'svelte';
+  import { api } from '#lib/api.js';
   import favicon from '#lib/assets/favicon.svg';
   import AppUpdated from '#lib/components/AppUpdated.svelte';
   import Onboarding from '#lib/components/Onboarding.svelte';
+  import TermsAcceptance from '#lib/components/TermsAcceptance.svelte';
   import Toasts from '#lib/components/Toasts.svelte';
   import { session } from '#lib/session.svelte.js';
   import { toast } from '#lib/stores/toast.svelte.js';
@@ -22,6 +25,10 @@
   $effect(() => {
     if (session.state.status === 'ready') void mountTelegramUi();
   });
+
+  async function acceptTerms() {
+    session.setUser(await session.authorized((token) => api.acceptTerms(token, TERMS_VERSION)));
+  }
 </script>
 
 <svelte:head>
@@ -45,6 +52,8 @@
       Повторить
     </button>
   </main>
+{:else if !session.state.user.termsAccepted}
+  <TermsAcceptance user={session.state.user} onAccept={acceptTerms} />
 {:else if !session.state.user.onboarded}
   <Onboarding
     user={session.state.user}

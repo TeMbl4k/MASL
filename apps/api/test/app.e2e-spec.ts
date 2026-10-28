@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { createTestDatabase, type TestDatabase } from '@masl/db/testing';
-import { INTERESTS, KARMA, type AuthResponse, type MeDto } from '@masl/shared';
+import { INTERESTS, KARMA, TERMS_VERSION, type AuthResponse, type MeDto } from '@masl/shared';
 import { createApp } from '../src/app.factory.js';
 import { loadEnv } from '../src/config/env.js';
 import { signInitData } from './init-data.helper.js';
@@ -116,6 +116,7 @@ describe.skipIf(!adminUrl)('API e2e (requires TEST_DATABASE_URL)', () => {
       username: 'anya',
       karma: KARMA.START,
       onboarded: false,
+      termsAccepted: false,
       interests: [],
     });
 
@@ -153,6 +154,14 @@ describe.skipIf(!adminUrl)('API e2e (requires TEST_DATABASE_URL)', () => {
       payload: { gender: 'male', age: 27, interests: ['sport', 'bars', 'hacking'] },
     });
     expect(unknownInterest.statusCode).toBe(400);
+
+    const terms = await app.inject({
+      method: 'PUT',
+      url: '/api/me/terms',
+      headers: auth,
+      payload: { version: TERMS_VERSION },
+    });
+    expect(terms.statusCode).toBe(200);
 
     const ok = await app.inject({
       method: 'PUT',
