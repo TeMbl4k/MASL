@@ -4,7 +4,7 @@ import { attendanceCounts, canMarkAbsent, initialAbsent } from './attendance.js'
 
 const member = (patch: Partial<AttendanceMemberDto>): AttendanceMemberDto => ({
   applicationId: crypto.randomUUID(),
-  user: { firstName: 'Анна', photoUrl: null, karma: 50 },
+  user: { code: 'a1b2c3d4e5f6', firstName: 'Анна', photoUrl: null, karma: 50 },
   checkedInAt: null,
   absent: false,
   status: 'approved',

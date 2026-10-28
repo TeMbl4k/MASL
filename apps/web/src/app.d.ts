@@ -15,7 +15,8 @@ declare global {
         | 'interests'
         | 'report'
         | 'appeal'
-        | 'moderation-action';
+        | 'moderation-action'
+        | 'share';
       /** Station id of the open `map-place` sheet. */
       placeKey?: string;
     }

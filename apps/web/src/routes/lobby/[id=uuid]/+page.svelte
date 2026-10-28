@@ -13,7 +13,7 @@
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { ApiError } from '#lib/api.js';
+  import { api, ApiError } from '#lib/api.js';
   import Avatar from '#lib/components/Avatar.svelte';
   import BottomAction from '#lib/components/BottomAction.svelte';
   import CancelLobbySheet from '#lib/components/CancelLobbySheet.svelte';
@@ -31,15 +31,17 @@
   import MemberList from '#lib/components/MemberList.svelte';
   import PageHeader from '#lib/components/PageHeader.svelte';
   import ReportSheet from '#lib/components/ReportSheet.svelte';
+  import ShareSheet from '#lib/components/ShareSheet.svelte';
   import StatusPill from '#lib/components/StatusPill.svelte';
   import { describeError, isAbort } from '#lib/errors.js';
-  import { formatShortDate } from '#lib/format/datetime.js';
-  import { LOBBY_CANCEL_REASON_LABELS } from '#lib/format/labels.js';
+  import { formatLobbyWhen, formatShortDate } from '#lib/format/datetime.js';
+  import { formatSeats, LOBBY_CANCEL_REASON_LABELS } from '#lib/format/labels.js';
   import { session } from '#lib/session.svelte.js';
   import { appActivity, clock, usePolling } from '#lib/stores/clock.svelte.js';
   import { feed } from '#lib/stores/feed.svelte.js';
   import { filters } from '#lib/stores/filters.svelte.js';
   import { lobbyCache } from '#lib/stores/lobbies.svelte.js';
+  import { myLobbies } from '#lib/stores/my-lobbies.svelte.js';
   import { origin } from '#lib/stores/origin.svelte.js';
   import { toast } from '#lib/stores/toast.svelte.js';
   import { openSheet } from '#lib/tg/back.svelte.js';
@@ -226,6 +228,35 @@
     }
   }
 
+  /** Answers the viewer's invite: «Иду» on the host's makes a member, on a member's an application. */
+  async function answerInvite(accept: boolean) {
+    const invite = detail?.invite;
+    if (busy || !invite) return;
+    busy = true;
+    try {
+      await session.authorized((token) =>
+        accept ? api.acceptInvite(token, invite.id) : api.declineInvite(token, invite.id),
+      );
+      if (accept) {
+        haptic.success();
+        toast.show(
+          invite.byHost ? 'Вы участник. Точный адрес пришлёт бот' : 'Заявка отправлена. Решает организатор',
+          'success',
+          5000,
+        );
+        void askWriteAccess();
+      } else {
+        toast.show('Приглашение отклонено');
+      }
+      myLobbies.invalidate();
+    } catch (error) {
+      toast.error(error);
+    } finally {
+      busy = false;
+      void load();
+    }
+  }
+
   function findSimilar() {
     if (lobby) filters.category = lobby.category;
     void goto('/');
@@ -233,6 +264,9 @@
 
   const primary = usePrimaryAction(() => {
     const pending = lobby?.pendingCount ?? 0;
+    if (detail?.invite && status === 'open') {
+      return { text: 'Иду', state: busy ? 'loading' : 'ready', onClick: () => void answerInvite(true) };
+    }
     switch (situation) {
       case 'host':
         if (attendanceOpen) {
@@ -336,6 +370,25 @@
     </PageHeader>
 
     <div class="flex flex-col gap-[1.125rem] px-5 pt-5">
+      {#if detail?.invite && status === 'open'}
+        {@const invite = detail.invite}
+        <div class="flex flex-col gap-3 rounded-[1.125rem] bg-brand-card p-4 text-paper" role="status">
+          <span class="font-semibold">{invite.from} зовёт вас на встречу</span>
+          <span class="text-[0.8125rem]">
+            {invite.byHost
+              ? 'Приглашение от организатора: после «Иду» вы сразу участник, адрес пришлёт бот.'
+              : 'После «Иду» организатор получит заявку и решит.'}
+          </span>
+          <button
+            type="button"
+            class="min-h-11 self-start rounded-xl bg-ink/25 px-4 disabled:opacity-50"
+            disabled={busy}
+            onclick={() => void answerInvite(false)}
+          >
+            Не смогу
+          </button>
+        </div>
+      {/if}
       {#if situation === 'cancelled'}
         {@const byModerator = detail?.cancelReason === 'moderation'}
         <div
@@ -422,8 +475,9 @@
 
       <LobbyFacts {lobby} />
 
-      <section
-        aria-label="Организатор"
+      <a
+        href="/u/{lobby.host.code}"
+        aria-label="Организатор: {lobby.host.firstName}, карма {lobby.host.karma}"
         class="flex items-center gap-3 rounded-[1.125rem] border border-gray-dark bg-gray-dark/40 p-3.5"
       >
         <Avatar name={lobby.host.firstName} src={lobby.host.photoUrl} size={44} />
@@ -435,7 +489,28 @@
           <Star size={16} strokeWidth={1.5} class="text-brand" />
           {lobby.host.karma}
         </span>
-      </section>
+        <ChevronRight size={18} class="text-gray-light" />
+      </a>
+
+      {#if status === 'open'}
+        <div class="grid gap-2 {detail?.canInvite ? 'grid-cols-2' : 'grid-cols-1'}">
+          <button
+            type="button"
+            class="min-h-11 rounded-[0.875rem] border border-gray-dark px-4 text-[0.9375rem]"
+            onclick={() => void openSheet('share')}
+          >
+            Поделиться
+          </button>
+          {#if detail?.canInvite}
+            <a
+              href="/lobby/{lobby.id}/invite"
+              class="flex min-h-11 items-center justify-center rounded-[0.875rem] border border-brand/70 px-4 text-[0.9375rem] text-brand-light"
+            >
+              Пригласить
+            </a>
+          {/if}
+        </div>
+      {/if}
 
       {#if detail}
         {#if detail.description}
@@ -563,4 +638,26 @@
 {/if}
 {#if lobby && !lobby.viewer.isHost && !lobby.viewer.reported}
   <ReportSheet lobbyId={lobby.id} ondone={reported} />
+{/if}
+{#if lobby}
+  {@const shared = lobby}
+  <ShareSheet
+    input={{ kind: 'lobby', id: shared.id }}
+    title="Поделиться встречей"
+    note="Точный адрес в карточку не попадает."
+  >
+    {#snippet preview()}
+      <div class="flex flex-col gap-1.5 rounded-2xl border border-gray-dark bg-ink/60 p-4">
+        <span class="font-semibold break-words">{shared.title}</span>
+        <span class="text-sm text-gray-light"
+          >{formatLobbyWhen(shared.startsAt, shared.endsAt, clock.now)}</span
+        >
+        <span class="text-sm text-gray-light">{shared.place.hint}</span>
+        <span class="text-sm text-gray-light">{formatSeats(shared.slots, shared.approvedCount)}</span>
+        <span class="mt-1.5 rounded-xl bg-gray-dark py-2 text-center text-sm font-semibold"
+          >Открыть встречу</span
+        >
+      </div>
+    {/snippet}
+  </ShareSheet>
 {/if}

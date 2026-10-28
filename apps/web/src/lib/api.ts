@@ -2,9 +2,23 @@ import {
   adminCancelLobbyResponse,
   adminCaseDto,
   adminCasesResponse,
+  adminStatsDto,
+  adminSupportDto,
+  adminSupportResponse,
+  adminTeamResponse,
   adminUserCardDto,
   adminUserSearchResponse,
   appealStateDto,
+  arrivalResponse,
+  companionsResponse,
+  inviteAnswerResponse,
+  inviteCandidatesResponse,
+  linkTagsResponse,
+  myInvitesResponse,
+  publicProfileDto,
+  sendInvitesResponse,
+  shareResponse,
+  supportResponse,
   attendanceResponse,
   cancelApplicationResponse,
   chatPrepareResponse,
@@ -21,7 +35,14 @@ import {
   placeSuggestResponse,
   reportResponse,
   type AdminCasesQuery,
+  type AdminStatsQuery,
+  type AdminSupportQuery,
   type AuthResponse,
+  type InviteCandidatesQuery,
+  type LinkTagInput,
+  type PrivacyInput,
+  type ShareInput,
+  type SupportInput,
   type CancelLobbyInput,
   type ChatPrepareInput,
   type CheckInInput,
@@ -113,6 +134,8 @@ function qs(params: Record<string, string | number | null | undefined>): string 
 const lobbyPath = (id: string) => `/lobbies/${encodeURIComponent(id)}`;
 const casePath = (id: string) => `/admin/cases/${encodeURIComponent(id)}`;
 const adminUserPath = (id: string) => `/admin/users/${encodeURIComponent(id)}`;
+const invitePath = (id: string) => `/me/invites/${encodeURIComponent(id)}`;
+const supportPath = (id: string) => `/admin/support/${encodeURIComponent(id)}`;
 const applicationPath = (id: string, applicationId: string) =>
   `${lobbyPath(id)}/applications/${encodeURIComponent(applicationId)}`;
 
@@ -205,6 +228,44 @@ export const api = {
   submitAppeal: (token: string, text: string) =>
     parsed(appealStateDto, request('/me/appeals', { method: 'POST', token, body: JSON.stringify({ text }) })),
 
+  // Stage 6: links, profiles, invites and feedback.
+  arrival: (token: string, startParam: string) =>
+    parsed(
+      arrivalResponse,
+      request('/me/arrival', { method: 'POST', token, body: JSON.stringify({ startParam }) }),
+    ),
+  updatePrivacy: (token: string, input: PrivacyInput) =>
+    parsed(meDto, request('/me/privacy', { method: 'PUT', token, body: JSON.stringify(input) })),
+  person: (token: string, code: string, signal?: AbortSignal) =>
+    parsed(publicProfileDto, request(`/people/${encodeURIComponent(code)}`, { token, signal })),
+  companions: (token: string, signal?: AbortSignal) =>
+    parsed(companionsResponse, request('/me/companions', { token, signal })),
+  share: (token: string, input: ShareInput) =>
+    parsed(shareResponse, request('/share', { method: 'POST', token, body: JSON.stringify(input) })),
+  inviteCandidates: (
+    token: string,
+    id: string,
+    query: Partial<InviteCandidatesQuery>,
+    signal?: AbortSignal,
+  ) =>
+    parsed(
+      inviteCandidatesResponse,
+      request(`${lobbyPath(id)}/invite-candidates${qs(query)}`, { token, signal }),
+    ),
+  sendInvites: (token: string, id: string, codes: string[]) =>
+    parsed(
+      sendInvitesResponse,
+      request(`${lobbyPath(id)}/invites`, { method: 'POST', token, body: JSON.stringify({ codes }) }),
+    ),
+  myInvites: (token: string, signal?: AbortSignal) =>
+    parsed(myInvitesResponse, request('/me/invites', { token, signal })),
+  acceptInvite: (token: string, id: string) =>
+    parsed(inviteAnswerResponse, request(`${invitePath(id)}/accept`, { method: 'POST', token, body: '{}' })),
+  declineInvite: (token: string, id: string) =>
+    parsed(inviteAnswerResponse, request(`${invitePath(id)}/decline`, { method: 'POST', token, body: '{}' })),
+  sendSupport: (token: string, input: SupportInput) =>
+    parsed(supportResponse, request('/me/support', { method: 'POST', token, body: JSON.stringify(input) })),
+
   // Moderation: moderators and admins only (the API checks the role on every call).
   adminCases: (token: string, query: Partial<AdminCasesQuery>, signal?: AbortSignal) =>
     parsed(adminCasesResponse, request(`/admin/cases${qs(query)}`, { token, signal })),
@@ -229,6 +290,24 @@ export const api = {
       adminUserCardDto,
       request(`${adminUserPath(id)}/actions`, { method: 'POST', token, body: JSON.stringify(input) }),
     ),
+  // Admins only.
+  adminStats: (token: string, query: Partial<AdminStatsQuery>, signal?: AbortSignal) =>
+    parsed(adminStatsDto, request(`/admin/stats${qs(query)}`, { token, signal })),
+  adminSupport: (token: string, query: Partial<AdminSupportQuery>, signal?: AbortSignal) =>
+    parsed(adminSupportResponse, request(`/admin/support${qs(query)}`, { token, signal })),
+  replySupport: (token: string, id: string, text: string) =>
+    parsed(
+      adminSupportDto,
+      request(`${supportPath(id)}/reply`, { method: 'POST', token, body: JSON.stringify({ text }) }),
+    ),
+  closeSupport: (token: string, id: string) =>
+    parsed(adminSupportDto, request(`${supportPath(id)}/close`, { method: 'POST', token, body: '{}' })),
+  adminTeam: (token: string, signal?: AbortSignal) =>
+    parsed(adminTeamResponse, request('/admin/team', { token, signal })),
+  linkTags: (token: string, signal?: AbortSignal) =>
+    parsed(linkTagsResponse, request('/admin/tags', { token, signal })),
+  createLinkTag: (token: string, input: LinkTagInput) =>
+    parsed(linkTagsResponse, request('/admin/tags', { method: 'POST', token, body: JSON.stringify(input) })),
 
   // POST: the typed address and the exact pin stay out of URLs and so out of access logs.
   placeSuggest: (token: string, q: string, signal?: AbortSignal) =>

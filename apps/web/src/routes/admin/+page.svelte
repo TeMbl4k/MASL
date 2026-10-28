@@ -12,6 +12,7 @@
   import EmptyState from '#lib/components/EmptyState.svelte';
   import ErrorState from '#lib/components/ErrorState.svelte';
   import Search from '#lib/components/icons/Search.svelte';
+  import AdminTabs from '#lib/components/moderation/AdminTabs.svelte';
   import SubjectCard from '#lib/components/moderation/SubjectCard.svelte';
   import PageHeader from '#lib/components/PageHeader.svelte';
   import { describeError, isAbort } from '#lib/errors.js';
@@ -154,6 +155,7 @@
   <PageHeader title="Модерация" subtitle="Очередь дел" />
 
   <div class="flex flex-col gap-4 px-5 pt-5">
+    <AdminTabs />
     {#if forbidden}
       <EmptyState
         title="Раздел только для модераторов"
