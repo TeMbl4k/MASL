@@ -20,6 +20,8 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import {
+  ACHIEVEMENTS,
+  BROADCAST_TEXT_MAX,
   CASE_DECISIONS,
   CREATION_BLOCK_KINDS,
   FEEDBACK_RATINGS,
@@ -69,6 +71,10 @@ export const moderationDecisionEnum = pgEnum('moderation_decision', MODERATION_D
 export const moderationActionEnum = pgEnum('moderation_action', MODERATION_ACTIONS);
 export const inviteStatusEnum = pgEnum('invite_status', INVITE_STATUSES);
 export const supportCategoryEnum = pgEnum('support_category', SUPPORT_CATEGORIES);
+export const achievementEnum = pgEnum('achievement', ACHIEVEMENTS);
+
+/** Private messages about the recipient themselves: no lobby, case, request, tag or broadcast. */
+const SELF_NOTIFICATION_KINDS: readonly NotificationKind[] = ['user_achievements', 'user_qr_print'];
 
 /** `decision in ('a','b')` for the decisions of one case kind. */
 const decisionsOf = (kind: keyof typeof CASE_DECISIONS) =>
@@ -128,6 +134,8 @@ export const users = pgTable(
     hideFromSearch: boolean('hide_from_search').notNull().default(false),
     /** «Приглашения на встречи»: false, nobody can invite the user. */
     invitesEnabled: boolean('invites_enabled').notNull().default(true),
+    /** «Новости MASL»: admin broadcasts (stage 7); off stops only them. */
+    newsEnabled: boolean('news_enabled').notNull().default(true),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
     ...timestamps,
   },
@@ -356,6 +364,9 @@ export const notifications = pgTable(
     supportId: uuid('support_id').references((): AnyPgColumn => supportRequests.id, {
       onDelete: 'cascade',
     }),
+    /** admin_tag_qr_print: the tag whose QR is sent. */
+    tagId: integer('tag_id').references((): AnyPgColumn => linkTags.id, { onDelete: 'cascade' }),
+    broadcastId: uuid('broadcast_id').references((): AnyPgColumn => broadcasts.id, { onDelete: 'cascade' }),
     kind: varchar('kind', { length: 40 }).$type<NotificationKind>().notNull(),
     /** At most one pending row per key (debounce). */
     dedupeKey: varchar('dedupe_key', { length: 120 }),
@@ -378,9 +389,10 @@ export const notifications = pgTable(
     // The daily cap of invite messages per person.
     index('notifications_user_kind_idx').on(t.userId, t.kind, t.createdAt),
     check('notifications_target_chk', sql`(${t.userId} is null) <> (${t.chatId} is null)`),
+    index('notifications_broadcast_idx').on(t.broadcastId),
     check(
       'notifications_subject_chk',
-      sql`${t.lobbyId} is not null or ${t.caseId} is not null or ${t.supportId} is not null`,
+      sql`${t.lobbyId} is not null or ${t.caseId} is not null or ${t.supportId} is not null or ${t.tagId} is not null or ${t.broadcastId} is not null or (${t.userId} is not null and ${t.kind} in (${sql.raw(SELF_NOTIFICATION_KINDS.map((k) => `'${k}'`).join(','))}))`,
     ),
   ],
 );
@@ -596,6 +608,50 @@ export const userActivityDays = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.day] }), index('user_activity_days_day_idx').on(t.day)],
 );
 
+/** An achievement a user earned (stage 7); never taken back. */
+export const userAchievements = pgTable(
+  'user_achievements',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    achievement: achievementEnum('achievement').notNull(),
+    earnedAt: timestamp('earned_at', { withTimezone: true }).notNull(),
+    /** Earned by the backfill of past meetups: the bot doesn't announce it. */
+    silent: boolean('silent').notNull().default(false),
+    /** The app showed «Новая ачивка». */
+    seenAt: timestamp('seen_at', { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.achievement] })],
+);
+
+/** An admin's broadcast (stage 7); every recipient's message is a notifications row. */
+export const broadcasts = pgTable('broadcasts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+  text: varchar('text', { length: BROADCAST_TEXT_MAX }).notNull(),
+  /** Interest slugs of the audience; null: everyone. */
+  interests: varchar('interests', { length: 32 }).array(),
+  /** «Открыть встречу»; null: «Открыть MASL». */
+  lobbyId: uuid('lobby_id').references(() => lobbies.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+});
+
+/** «Отписаться от новостей» tapped under a broadcast. */
+export const broadcastUnsubscribes = pgTable(
+  'broadcast_unsubscribes',
+  {
+    broadcastId: uuid('broadcast_id')
+      .notNull()
+      .references(() => broadcasts.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.broadcastId, t.userId] })],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Interest = typeof interests.$inferSelect;
@@ -611,3 +667,5 @@ export type ModerationActionRow = typeof moderationActions.$inferSelect;
 export type LobbyInvite = typeof lobbyInvites.$inferSelect;
 export type SupportRequest = typeof supportRequests.$inferSelect;
 export type LinkTag = typeof linkTags.$inferSelect;
+export type UserAchievement = typeof userAchievements.$inferSelect;
+export type Broadcast = typeof broadcasts.$inferSelect;

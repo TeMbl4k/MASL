@@ -57,6 +57,13 @@
       "when": 1793196182614,
       "tag": "0007_stage6_links_invites_support",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793218684026,
+      "tag": "0008_stage7_achievements_broadcasts",
+      "breakpoints": true
     }
   ]
 }
