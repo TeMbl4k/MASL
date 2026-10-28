@@ -8,6 +8,9 @@ import {
   FEED_PAGE_SIZE_MAX,
   INTERESTS_MAX,
   INTERESTS_MIN,
+  INVITES_PER_REQUEST_MAX,
+  LINK_TAG_SLUG_MAX,
+  LINK_TAG_TITLE_MAX,
   LOBBY_ADDRESS_MAX,
   LOBBY_ADDRESS_MIN,
   LOBBY_CANCEL_COMMENT_MAX,
@@ -23,15 +26,23 @@ import {
   MODERATION_COMMENT_MAX,
   MODERATION_KARMA_DELTA_MAX,
   MOSCOW_BOUNDS,
+  PERSON_SEARCH_MAX,
+  PERSON_SEARCH_MIN,
   PLACE_QUERY_MAX,
   PLACE_QUERY_MIN,
+  PUBLIC_CODE_LENGTH,
   REPORT_COMMENT_MAX,
+  START_PARAM_MAX,
+  SUPPORT_REPLY_MAX,
+  SUPPORT_TEXT_MAX,
+  SUPPORT_TEXT_MIN,
   USER_SEARCH_MAX,
   USER_SEARCH_MIN,
 } from './constants.js';
 import {
   API_ERROR_CODES,
   APPEAL_STATUSES,
+  ARRIVAL_SOURCES,
   APPLY_BLOCK_REASONS,
   ATTENDANCE_STATES,
   CHAT_STATES,
@@ -39,6 +50,8 @@ import {
   CREATION_BLOCK_KINDS,
   FEEDBACK_RATINGS,
   GENDERS,
+  INVITE_CANDIDATE_STATES,
+  INVITE_STATES,
   KARMA_REASONS,
   LOBBY_CANCEL_REASONS,
   LOBBY_CANCEL_REASONS_OUT,
@@ -52,6 +65,9 @@ import {
   PAYMENT_FORMATS,
   REPORT_NOT_COUNTED,
   REPORT_REASONS,
+  STATS_PERIODS,
+  SUPPORT_CATEGORIES,
+  SUPPORT_STATUSES,
   USER_MODERATION_ACTIONS,
   USER_ROLES,
 } from './enums.js';
@@ -83,6 +99,8 @@ const moscowDate = z.iso
   .date()
   .refine((day) => day >= MOSCOW_DAY_MIN && day <= MOSCOW_DAY_MAX, 'Некорректная дата');
 const hexColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
+/** A person's public code (links, profiles, invites); never the user id or Telegram id. */
+const publicCode = z.string().regex(new RegExp(`^[0-9a-f]{${PUBLIC_CODE_LENGTH}}$`), 'Неверный код профиля');
 const MARK_FLOOD_MESSAGE = 'Слишком много диакритических знаков';
 
 /** `?x=` arrives as ''; treat it as a missing parameter (z.coerce.number('') would be 0). */
@@ -187,6 +205,12 @@ export const meDto = z.object({
   role: z.enum(USER_ROLES),
   /** Open moderation cases; moderators and admins only. */
   moderationQueue: z.number().int().nullable(),
+  /** The profile's public code: links to the profile and the ref of shared links. */
+  publicCode: z.string(),
+  /** «Не показывать меня в поиске»: companions still find the user in their filter. */
+  hideFromSearch: z.boolean(),
+  /** «Приглашения на встречи»: off, nobody can invite the user. */
+  invitesEnabled: z.boolean(),
 });
 export type MeDto = z.infer<typeof meDto>;
 
@@ -334,8 +358,12 @@ export type PlaceReverseInput = z.infer<typeof placeReverseInput>;
 export const geoPointDto = z.strictObject({ lat: z.number(), lng: z.number() });
 export type GeoPointDto = z.infer<typeof geoPointDto>;
 
-/** Public data of a host or member; no user id, username or Telegram id. */
+/**
+ * Public data of a host or member; no user id, username or Telegram id. `code` opens the
+ * person's public profile.
+ */
 export const personDto = z.strictObject({
+  code: z.string(),
   firstName: z.string(),
   photoUrl: z.string().nullable(),
   karma: z.number().int(),
@@ -431,6 +459,10 @@ const lobbyDetailBase = lobbyCardDto.extend({
   cancelPolicy: cancelPolicyDto.nullable(),
   checkIn: checkInDto.nullable(),
   attendance: attendanceSummaryDto.nullable(),
+  /** The host or an approved member may invite people now (open, not started, places left). */
+  canInvite: z.boolean(),
+  /** The viewer's unanswered invite to this lobby, while it still works. */
+  invite: z.strictObject({ id: z.uuid(), byHost: z.boolean(), from: z.string() }).nullable(),
 });
 
 /** GET /lobbies/:id and every lobby mutation; only `member` and `host` carry the exact place. */
@@ -476,7 +508,12 @@ export const myLobbiesResponse = z.strictObject({
   hosting: lobbyBucketDto,
   joined: lobbyBucketDto,
   /** Profile numbers: hosted lobbies that are not cancelled, memberships in occupying statuses. */
-  counts: z.strictObject({ hosted: z.number().int(), joined: z.number().int() }),
+  counts: z.strictObject({
+    hosted: z.number().int(),
+    joined: z.number().int(),
+    /** People met at meetups (spec stage 6): marked present at one meetup with the user. */
+    companions: z.number().int(),
+  }),
   /** Hosted lobbies whose members still wait for the host's attendance marks. */
   attendanceDue: z.array(z.uuid()),
 });
@@ -532,6 +569,8 @@ export const applicantDto = z.strictObject({
   decidedAt: isoOut.nullable(),
   user: personDto.extend({ isNewbie: z.boolean() }),
   meetsMinKarma: z.boolean(),
+  /** First name of the member whose invite the applicant accepted (stage 6). */
+  invitedBy: z.string().nullable(),
 });
 export type ApplicantDto = z.infer<typeof applicantDto>;
 
@@ -920,6 +959,281 @@ export type AdminCancelLobbyInput = z.infer<typeof adminCancelLobbyInput>;
 
 export const adminCancelLobbyResponse = z.strictObject({ lobby: adminLobbyDto });
 export type AdminCancelLobbyResponse = z.infer<typeof adminCancelLobbyResponse>;
+
+// Stage 6: links, profiles, invites, feedback. Public people are named by their public code.
+
+/** `:code` route param of a public profile. */
+export const personCodeParam = publicCode;
+
+/** A person in search results and invites: name and photo only. */
+export const personRefDto = z.strictObject({
+  code: z.string(),
+  firstName: z.string(),
+  photoUrl: z.string().nullable(),
+});
+export type PersonRefDto = z.infer<typeof personRefDto>;
+
+/** POST /me/arrival — the start parameter the app was opened with; the server parses it. */
+export const arrivalInput = z.object({ startParam: z.string().min(1).max(START_PARAM_MAX) });
+export type ArrivalInput = z.infer<typeof arrivalInput>;
+
+/** `recorded`: the link became the user's source (a new user's first valid link). */
+export const arrivalResponse = z.strictObject({ recorded: z.boolean() });
+export type ArrivalResponse = z.infer<typeof arrivalResponse>;
+
+/** POST /share — what to share; the link carries the sharer's public code. */
+export const shareInput = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('lobby'), id: z.uuid() }),
+  z.object({ kind: z.literal('profile'), code: publicCode }),
+]);
+export type ShareInput = z.infer<typeof shareInput>;
+
+export const shareResponse = z.strictObject({
+  /** t.me link that opens the Mini App on the lobby or profile. */
+  link: z.url(),
+  /** For WebApp.shareMessage: a card with an «Открыть» button; null when Telegram refused. */
+  preparedMessageId: z.string().nullable(),
+});
+export type ShareResponse = z.infer<typeof shareResponse>;
+
+/** PUT /me/privacy */
+export const privacyInput = z.object({ hideFromSearch: z.boolean(), invitesEnabled: z.boolean() });
+export type PrivacyInput = z.infer<typeof privacyInput>;
+
+/** GET /people/:code — no age, gender, username, Telegram id or the meetups the person joins. */
+export const publicProfileDto = z.strictObject({
+  code: z.string(),
+  firstName: z.string(),
+  photoUrl: z.string().nullable(),
+  karma: z.number().int(),
+  /** Hosted meetups at least one member attended. */
+  hosted: z.number().int(),
+  /** Meetups the person was marked present at. */
+  attended: z.number().int(),
+  companions: z.number().int(),
+  interests: z.array(z.string()),
+  /** The person's hosted lobbies that are open and have not started, the viewer's view. */
+  lobbies: z.array(lobbyCardDto),
+  isSelf: z.boolean(),
+  /** The viewer and the person met at a meetup. */
+  isCompanion: z.boolean(),
+});
+export type PublicProfileDto = z.infer<typeof publicProfileDto>;
+
+export const companionDto = z.strictObject({
+  person: personDto,
+  /** Meetups both were marked present at. */
+  meetups: z.number().int(),
+  lastMetAt: isoOut,
+});
+export type CompanionDto = z.infer<typeof companionDto>;
+
+/** GET /me/companions — the owner's list only; the most recent meeting first. */
+export const companionsResponse = z.strictObject({ items: z.array(companionDto) });
+export type CompanionsResponse = z.infer<typeof companionsResponse>;
+
+/** GET /lobbies/:id/invite-candidates — `all` needs a query, `companions` filters by one if any. */
+export const inviteCandidatesQuery = z
+  .object({
+    filter: z.preprocess(emptyToUndefined, z.enum(['all', 'companions']).default('all')),
+    q: optionalQuery(
+      singleLine(PERSON_SEARCH_MIN, PERSON_SEARCH_MAX, {
+        tooShort: `Введите от ${PERSON_SEARCH_MIN} символов`,
+        tooLong: `Не больше ${PERSON_SEARCH_MAX} символов`,
+      }),
+    ),
+  })
+  .refine((query) => query.filter === 'companions' || query.q !== undefined, {
+    path: ['q'],
+    error: `Введите от ${PERSON_SEARCH_MIN} символов`,
+  });
+export type InviteCandidatesQuery = z.infer<typeof inviteCandidatesQuery>;
+
+export const inviteCandidateDto = z.strictObject({
+  person: personRefDto,
+  companion: z.boolean(),
+  state: z.enum(INVITE_CANDIDATE_STATES),
+});
+export type InviteCandidateDto = z.infer<typeof inviteCandidateDto>;
+
+export const inviteCandidatesResponse = z.strictObject({
+  items: z.array(inviteCandidateDto),
+  /** Places left in the lobby. */
+  freeSlots: z.number().int(),
+  /** Invites the viewer may still send today; null without a limit (admins and moderators). */
+  invitesLeft: z.number().int().nullable(),
+});
+export type InviteCandidatesResponse = z.infer<typeof inviteCandidatesResponse>;
+
+/** POST /lobbies/:id/invites */
+export const sendInvitesInput = z.object({
+  codes: z
+    .array(publicCode)
+    .min(1, 'Выберите, кого позвать')
+    .max(INVITES_PER_REQUEST_MAX, `За раз можно позвать до ${INVITES_PER_REQUEST_MAX} человек`)
+    .refine((codes) => new Set(codes).size === codes.length, 'Люди не должны повторяться'),
+});
+export type SendInvitesInput = z.infer<typeof sendInvitesInput>;
+
+/** `skipped`: people who can't be invited any more (invited, going, opted out, gone). */
+export const sendInvitesResponse = z.strictObject({ sent: z.number().int(), skipped: z.number().int() });
+export type SendInvitesResponse = z.infer<typeof sendInvitesResponse>;
+
+/** An invite as the invitee sees it. */
+export const myInviteDto = z.strictObject({
+  id: z.uuid(),
+  state: z.enum(INVITE_STATES),
+  /** From the host: «Иду» makes the invitee a member; from a member it is an application. */
+  byHost: z.boolean(),
+  from: personRefDto,
+  createdAt: isoOut,
+  lobby: lobbyCardDto,
+});
+export type MyInviteDto = z.infer<typeof myInviteDto>;
+
+/** GET /me/invites — pending first, then answered and expired, newest first. */
+export const myInvitesResponse = z.strictObject({ items: z.array(myInviteDto) });
+export type MyInvitesResponse = z.infer<typeof myInvitesResponse>;
+
+/** POST /me/invites/:id/accept and /decline */
+export const inviteAnswerResponse = z.strictObject({ invite: myInviteDto });
+export type InviteAnswerResponse = z.infer<typeof inviteAnswerResponse>;
+
+/** POST /me/support — «Написать нам». */
+export const supportInput = z.object({
+  category: z.enum(SUPPORT_CATEGORIES, { error: 'Выберите, о чём обращение' }),
+  text: boundedMultiLine(SUPPORT_TEXT_MIN, SUPPORT_TEXT_MAX, {
+    tooShort: `Напишите подробнее: от ${SUPPORT_TEXT_MIN} символов`,
+    tooLong: `Обращение — до ${SUPPORT_TEXT_MAX} символов`,
+  }),
+});
+export type SupportInput = z.infer<typeof supportInput>;
+
+export const supportResponse = z.strictObject({ sent: z.literal(true) });
+export type SupportResponse = z.infer<typeof supportResponse>;
+
+// Admins only (stage 6): statistics, feedback, the team and link tags.
+
+/** A request as admins see it. */
+export const adminSupportDto = z.strictObject({
+  id: z.uuid(),
+  category: z.enum(SUPPORT_CATEGORIES),
+  text: z.string(),
+  createdAt: isoOut,
+  author: z.strictObject({ id: z.uuid(), firstName: z.string(), username: z.string().nullable() }),
+  status: z.enum(SUPPORT_STATUSES),
+  reply: z.string().nullable(),
+  repliedAt: isoOut.nullable(),
+  repliedBy: userRef.nullable(),
+  closedAt: isoOut.nullable(),
+});
+export type AdminSupportDto = z.infer<typeof adminSupportDto>;
+
+/** GET /admin/support */
+export const adminSupportQuery = z.object({
+  status: z.preprocess(emptyToUndefined, z.enum(SUPPORT_STATUSES).default('open')),
+});
+export type AdminSupportQuery = z.infer<typeof adminSupportQuery>;
+
+/** Open: oldest first; closed: the latest closed first. */
+export const adminSupportResponse = z.strictObject({
+  items: z.array(adminSupportDto),
+  counts: z.strictObject({ open: z.number().int(), closed: z.number().int() }),
+});
+export type AdminSupportResponse = z.infer<typeof adminSupportResponse>;
+
+/** POST /admin/support/:id/reply — goes to the author through the bot; one reply per request. */
+export const supportReplyInput = z.object({
+  text: boundedMultiLine(1, SUPPORT_REPLY_MAX, {
+    tooShort: 'Напишите ответ',
+    tooLong: `Ответ — до ${SUPPORT_REPLY_MAX} символов`,
+  }),
+});
+export type SupportReplyInput = z.infer<typeof supportReplyInput>;
+
+/** GET /admin/stats */
+export const adminStatsQuery = z.object({
+  period: z.preprocess(emptyToUndefined, z.enum(STATS_PERIODS).default('7d')),
+});
+export type AdminStatsQuery = z.infer<typeof adminStatsQuery>;
+
+const statsCount = z.number().int();
+
+export const adminStatsDto = z.strictObject({
+  period: z.enum(STATS_PERIODS),
+  /** People who opened the app: today, in the last 7 and 30 Moscow days. */
+  uniques: z.strictObject({ today: statsCount, days7: statsCount, days30: statsCount }),
+  /** Uniques per Moscow day of the period, oldest first. */
+  byDay: z.array(z.strictObject({ date: moscowDate, count: statsCount })),
+  /** Users who signed up in the period, and those of them who finished onboarding. */
+  users: z.strictObject({ new: statsCount, onboarded: statsCount }),
+  /** Lobbies created in the period: held (someone attended) and cancelled. */
+  lobbies: z.strictObject({ created: statsCount, held: statsCount, cancelled: statsCount }),
+  /** Marks of members of lobbies that ended in the period. */
+  attendance: z.strictObject({ attended: statsCount, noShow: statsCount }),
+  /** People whose second attended meetup ended in the period. */
+  returning: statsCount,
+  reports: statsCount,
+  /** New users of the period by where they came from; tags with no arrivals are left out. */
+  sources: z.array(
+    z.strictObject({
+      kind: z.enum(ARRIVAL_SOURCES),
+      tag: z.strictObject({ slug: z.string(), title: z.string() }).nullable(),
+      newUsers: statsCount,
+      onboarded: statsCount,
+      /** Of them, attended at least one meetup. */
+      attended: statsCount,
+    }),
+  ),
+});
+export type AdminStatsDto = z.infer<typeof adminStatsDto>;
+
+/** An admin (from ADMIN_TELEGRAM_IDS) or a moderator; an admin who never signed in has no user. */
+export const teamMemberDto = z.strictObject({
+  role: z.enum(['admin', 'moderator']),
+  telegramId: z.number().int(),
+  user: z.strictObject({ id: z.uuid(), firstName: z.string(), username: z.string().nullable() }).nullable(),
+  /** Moderators: when they were appointed, if the log has it. */
+  since: isoOut.nullable(),
+});
+export type TeamMemberDto = z.infer<typeof teamMemberDto>;
+
+/** GET /admin/team — admins first, then moderators by name. */
+export const adminTeamResponse = z.strictObject({ items: z.array(teamMemberDto) });
+export type AdminTeamResponse = z.infer<typeof adminTeamResponse>;
+
+/** POST /admin/tags */
+export const linkTagInput = z.object({
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(
+      new RegExp(`^[a-z0-9-]{1,${LINK_TAG_SLUG_MAX}}$`),
+      `Метка — латиница, цифры и дефис, до ${LINK_TAG_SLUG_MAX} символов`,
+    ),
+  title: singleLine(1, LINK_TAG_TITLE_MAX, {
+    tooShort: 'Напишите название',
+    tooLong: `Название — до ${LINK_TAG_TITLE_MAX} символов`,
+  }),
+});
+export type LinkTagInput = z.infer<typeof linkTagInput>;
+
+export const linkTagDto = z.strictObject({
+  id: z.number().int(),
+  slug: z.string(),
+  title: z.string(),
+  /** The tag's t.me link; null while the bot's username is unknown. */
+  link: z.url().nullable(),
+  /** New users whose source is the tag, all time. */
+  arrivals: z.number().int(),
+  createdAt: isoOut,
+});
+export type LinkTagDto = z.infer<typeof linkTagDto>;
+
+/** GET and POST /admin/tags — newest first. */
+export const linkTagsResponse = z.strictObject({ items: z.array(linkTagDto) });
+export type LinkTagsResponse = z.infer<typeof linkTagsResponse>;
 
 /**
  * Error body built by the API's apiError(), including the 409/400/500 bodies of the exception

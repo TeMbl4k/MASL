@@ -388,7 +388,7 @@ describe('response schemas fail closed', () => {
       farFromMetro: false,
     },
     distanceM: 2400,
-    host: { firstName: 'Анна', photoUrl: null, karma: 50 },
+    host: { code: 'a1b2c3d4e5f6', firstName: 'Анна', photoUrl: null, karma: 50 },
     viewer: { isHost: false, membershipStatus: null, applyBlock: null, reported: false },
   };
   const detail = {
@@ -401,6 +401,8 @@ describe('response schemas fail closed', () => {
     cancelPolicy: null,
     checkIn: null,
     attendance: null,
+    canInvite: false,
+    invite: null,
   };
   const exactPlace = { address: 'CANARY-ул. Тестовая, 1', point: { lat: 55.7951, lng: 37.5502 } };
 
@@ -422,6 +424,7 @@ describe('response schemas fail closed', () => {
       decidedAt: null,
       user: { ...card.host, isNewbie: true },
       meetsMinKarma: true,
+      invitedBy: null,
     };
     expect(ok(applicantDto, applicant)).toBe(true);
     expect(ok(applicantDto, { ...applicant, user: { ...applicant.user, telegramId: 1 } })).toBe(false);
@@ -480,7 +483,7 @@ describe('response schemas fail closed', () => {
       ok(myLobbiesResponse, {
         hosting: bucket,
         joined: bucket,
-        counts: { hosted: 1, joined: 0 },
+        counts: { hosted: 1, joined: 0, companions: 0 },
         attendanceDue: [],
       }),
     ).toBe(true);

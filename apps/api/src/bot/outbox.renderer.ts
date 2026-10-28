@@ -6,10 +6,12 @@ import {
   karmaEvents,
   lobbies,
   lobbyFeedback,
+  lobbyInvites,
   lobbyMembers,
   moderationCases,
   notifications,
   reports,
+  supportRequests,
   users,
   type Database,
   type Notification,
@@ -19,6 +21,7 @@ import {
   NEWBIE_ATTENDED_MIN,
   REPORT_REASONS,
   REPORT_REASON_LABELS,
+  SUPPORT_CATEGORY_LABELS,
   appealRetryAt,
   attendanceDeadline,
   attendanceState,
@@ -31,6 +34,8 @@ import {
 import { CLOCK, type Clock } from '../clock/clock.module.js';
 import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
+import { inviteWorks, inviterUser } from '../invites/invite-queries.js';
+import { hostUser } from '../lobbies/lobby-queries.js';
 import { parseCancelReason } from '../lobbies/lobby.mapper.js';
 import { userRole } from '../moderation/roles.js';
 import {
@@ -60,6 +65,7 @@ const lobbyColumns = {
   id: lobbies.id,
   hostId: lobbies.hostId,
   title: lobbies.title,
+  placeHint: lobbies.placeHint,
   startsAt: lobbies.startsAt,
   endsAt: lobbies.endsAt,
   status: lobbies.status,
@@ -169,6 +175,7 @@ export class OutboxRenderer {
 
   async render(row: Notification): Promise<TelegramCall[] | null> {
     if (row.caseId !== null) return this.renderCase(row, row.caseId);
+    if (row.supportId !== null) return this.renderSupport(row, row.supportId);
     if (row.lobbyId === null) return null;
     const lobby = await loadLobby(this.db, row.lobbyId);
     if (!lobby) return null;
@@ -337,6 +344,47 @@ export class OutboxRenderer {
           ]),
         };
       }
+      case 'user_invite': {
+        if (row.inviteId === null) return null;
+        if (
+          !inviteWorks({ effectiveStatus: status, approvedCount: lobby.approvedCount, slots: lobby.slots })
+        ) {
+          return null;
+        }
+        const [invite] = await this.db
+          .select({
+            status: lobbyInvites.status,
+            byHost: lobbyInvites.byHost,
+            from: inviterUser.firstName,
+            inviterBanned: inviterUser.isShadowBanned,
+            hostBanned: hostUser.isShadowBanned,
+            invitesEnabled: users.invitesEnabled,
+          })
+          .from(lobbyInvites)
+          .innerJoin(inviterUser, eq(inviterUser.id, lobbyInvites.inviterId))
+          .innerJoin(users, eq(users.id, lobbyInvites.inviteeId))
+          .innerJoin(lobbies, eq(lobbies.id, lobbyInvites.lobbyId))
+          .innerJoin(hostUser, eq(hostUser.id, lobbies.hostId))
+          .where(eq(lobbyInvites.id, row.inviteId));
+        if (!invite || invite.status !== 'pending' || !invite.invitesEnabled) return null;
+        if (invite.inviterBanned || invite.hostBanned) return null;
+        const button = (text: string, action: 'invite_accept' | 'invite_decline' | 'invite_opt_out') => ({
+          text,
+          callback_data: encodeCallback({ action, inviteId: row.inviteId! }),
+        });
+        return {
+          text: texts.userInvite(
+            { ...lobby, free: lobby.slots - lobby.approvedCount, slots: lobby.slots },
+            invite.from,
+            invite.byHost,
+          ),
+          markup: keyboard([
+            [button(texts.inviteAccept, 'invite_accept'), button(texts.inviteDecline, 'invite_decline')],
+            [button(texts.inviteOptOut, 'invite_opt_out')],
+            [await appButton('Открыть встречу', appPaths.lobby(lobby.id))],
+          ]),
+        };
+      }
       default:
         return null;
     }
@@ -456,6 +504,59 @@ export class OutboxRenderer {
       }
       default:
         return null;
+    }
+    return [
+      {
+        method: 'sendMessage',
+        payload: {
+          chat_id: recipient.telegramId,
+          text: message.text,
+          reply_markup: message.markup,
+          link_preview_options: { is_disabled: true },
+        },
+      },
+    ];
+  }
+
+  /**
+   * «Написать нам» (stage 6): a new request to an admin while it is open and they are still an
+   * admin; the reply to its author.
+   */
+  private async renderSupport(row: Notification, supportId: string): Promise<TelegramCall[] | null> {
+    const [request] = await this.db
+      .select({
+        authorId: supportRequests.authorId,
+        category: supportRequests.category,
+        text: supportRequests.text,
+        reply: supportRequests.reply,
+        closedAt: supportRequests.closedAt,
+        authorFirstName: users.firstName,
+      })
+      .from(supportRequests)
+      .innerJoin(users, eq(users.id, supportRequests.authorId))
+      .where(eq(supportRequests.id, supportId));
+    const [recipient] = await this.db
+      .select({ telegramId: users.telegramId, isModerator: users.isModerator })
+      .from(users)
+      .where(eq(users.id, row.userId!));
+    if (!request || !recipient) return null;
+    let message: PrivateMessage;
+    if (row.kind === 'admin_new_support') {
+      if (request.closedAt !== null || userRole(recipient, this.env.ADMIN_TELEGRAM_IDS) !== 'admin')
+        return null;
+      message = {
+        text: texts.adminNewSupport(
+          SUPPORT_CATEGORY_LABELS[request.category],
+          request.authorFirstName,
+          request.text,
+        ),
+        markup: keyboard([[await this.links.button('Открыть обращения', appPaths.adminSupport())]]),
+      };
+    } else if (row.kind === 'user_support_reply') {
+      if (request.reply === null || row.userId !== request.authorId) return null;
+      message = { text: texts.userSupportReply(request.reply) };
+    } else {
+      return null;
     }
     return [
       {

@@ -27,6 +27,6 @@ import { MeLobbiesController } from './me-lobbies.controller.js';
     LobbyStatusSweeper,
     ChatService,
   ],
-  exports: [LobbiesService, ChatService, AttendanceService, FeedbackService],
+  exports: [LobbiesService, ApplicationsService, ChatService, AttendanceService, FeedbackService],
 })
 export class LobbiesModule {}

@@ -43,7 +43,7 @@ describe.skipIf(!adminUrl)('FeedService (requires TEST_DATABASE_URL)', () => {
     const lobbiesService = new LobbiesService(
       handle.db,
       clock,
-      {} as Env,
+      { ADMIN_TELEGRAM_IDS: [] } as unknown as Env,
       {} as OutboxService,
       {} as KarmaService,
     );

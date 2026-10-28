@@ -157,6 +157,50 @@ export const texts = {
       .join('\n'),
   userAppealRejected: (reason: string, retryAt: Instant) =>
     `Апелляцию отклонили: ${reason}. Повторно можно с ${formatMoscow(retryAt, { day: 'numeric', month: 'long' })}.`,
+
+  // The share card goes to any chat: public data only, never the exact place.
+  shareLobby: (m: MeetupRef & { placeHint: string; free: number; slots: number }) =>
+    [
+      `«${m.title}»`,
+      formatMeetupWhen(m.startsAt, m.endsAt),
+      m.placeHint,
+      m.free > 0 ? `Свободно мест: ${m.free} из ${m.slots}` : 'Мест пока нет',
+      '',
+      'Спонтанные встречи в Москве — MASL',
+    ].join('\n'),
+  shareLobbyButton: 'Открыть встречу',
+  shareProfile: (firstName: string, karma: number) =>
+    [`${firstName} в MASL · карма ${karma}`, '', 'Спонтанные встречи в Москве — MASL'].join('\n'),
+  shareProfileButton: 'Открыть профиль',
+
+  userInvite: (
+    m: MeetupRef & { placeHint: string; free: number; slots: number },
+    from: string,
+    byHost: boolean,
+  ) =>
+    [
+      byHost ? `${from} зовёт вас на свою встречу «${m.title}»` : `${from} зовёт вас на «${m.title}»`,
+      formatMeetupWhen(m.startsAt, m.endsAt),
+      m.placeHint,
+      `Свободно мест: ${m.free} из ${m.slots}`,
+      '',
+      byHost
+        ? 'Нажмите «Иду», и место ваше: точный адрес придёт сюда.'
+        : 'Нажмите «Иду», и мы отправим заявку: решение за хостом.',
+    ].join('\n'),
+  inviteAccept: 'Иду',
+  inviteDecline: 'Не смогу',
+  inviteOptOut: 'Не приглашать меня',
+  inviteGoing: 'Место ваше! Точный адрес — в следующем сообщении.',
+  inviteApplied: 'Заявка отправлена, хост скоро ответит.',
+  inviteDeclined: 'Хорошо, в другой раз.',
+  inviteOptedOut: 'Больше не будем звать вас на встречи. Включить приглашения можно в профиле.',
+
+  feedbackPrompt: 'Расскажите, что улучшить, что сломалось или что непонятно. Ответ придёт сюда.',
+  feedbackButton: 'Написать нам',
+  adminNewSupport: (category: string, firstName: string, text: string) =>
+    [`Новое обращение · ${category} · ${firstName}`, '', text].join('\n'),
+  userSupportReply: (reply: string) => ['Ответ на ваше обращение:', '', reply].join('\n'),
 };
 
 /** Admin rights the bot needs in the meetup group, with their names in BotFather's terms. */

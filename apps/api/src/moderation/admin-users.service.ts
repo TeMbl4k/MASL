@@ -18,7 +18,7 @@ import { ENV, type Env } from '../config/env.js';
 import { DB } from '../db/db.module.js';
 import { apiError } from '../errors/api-error.js';
 import { KarmaService, type DbTransaction } from '../karma/karma.service.js';
-import { lockUser, type Executor } from '../lobbies/lobby-queries.js';
+import { lockUser, prefixPattern, type Executor } from '../lobbies/lobby-queries.js';
 import {
   loadAdminUser,
   loadCreationBlock,
@@ -30,11 +30,6 @@ import { logModeration, type LogEntry } from './moderation-log.js';
 import { blockCreation, setShadowBan, unblockCreation } from './user-flags.js';
 
 const actor = alias(users, 'actor');
-
-/** A LIKE pattern matching values that start with `text`; % and _ in it are literal. */
-export function prefixPattern(text: string): string {
-  return `${text.replace(/[\\%_]/g, '\\$&')}%`;
-}
 
 /** Search, the user card and what a moderator can do from it (spec stage 4 §4.2). */
 @Injectable()

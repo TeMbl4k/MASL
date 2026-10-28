@@ -36,7 +36,7 @@ const FORBIDDEN_PERSON_KEYS = ['id', 'userId', 'username', 'telegramId', 'lastNa
 /** Fails if any person object in the body carries identifying fields beyond the public ones. */
 function assertPeopleArePublic(body: Pick<LobbyDetailDto, 'host'> & { members?: LobbyDetailDto['members'] }) {
   for (const person of [body.host, ...(body.members ?? [])]) {
-    expect(Object.keys(person).sort()).toEqual(['firstName', 'karma', 'photoUrl']);
+    expect(Object.keys(person).sort()).toEqual(['code', 'firstName', 'karma', 'photoUrl']);
     for (const key of FORBIDDEN_PERSON_KEYS) expect(person).not.toHaveProperty(key);
   }
 }

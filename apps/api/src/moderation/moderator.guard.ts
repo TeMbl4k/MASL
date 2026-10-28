@@ -34,16 +34,38 @@ export class ModeratorGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<ModeratorRequest>();
-    if (!request.userId) throw new UnauthorizedException('Нужна авторизация');
-    const [user] = await this.db
-      .select({ telegramId: users.telegramId, isModerator: users.isModerator })
-      .from(users)
-      .where(eq(users.id, request.userId));
-    const role = user ? userRole(user, this.env.ADMIN_TELEGRAM_IDS) : 'user';
+    const role = await requestRole(this.db, this.env, request);
     if (role === 'user') throw apiError('forbidden_moderation');
     request.moderationRole = role;
     return true;
   }
+}
+
+/** Admins only (stage 6: statistics, feedback, the team and link tags), 403 `admin_section`. */
+@Injectable()
+export class AdminGuard implements CanActivate {
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    @Inject(ENV) private readonly env: Env,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<ModeratorRequest>();
+    const role = await requestRole(this.db, this.env, request);
+    if (role !== 'admin') throw apiError(role === 'user' ? 'forbidden_moderation' : 'admin_section');
+    request.moderationRole = role;
+    return true;
+  }
+}
+
+/** The role of the request's user, read fresh; runs after AuthGuard. */
+async function requestRole(db: Database, env: Env, request: ModeratorRequest): Promise<UserRole> {
+  if (!request.userId) throw new UnauthorizedException('Нужна авторизация');
+  const [user] = await db
+    .select({ telegramId: users.telegramId, isModerator: users.isModerator })
+    .from(users)
+    .where(eq(users.id, request.userId));
+  return user ? userRole(user, env.ADMIN_TELEGRAM_IDS) : 'user';
 }
 
 /** The viewer is an admin; use only together with ModeratorGuard. */

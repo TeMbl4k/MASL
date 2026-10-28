@@ -21,6 +21,7 @@ import {
   geographyFrom,
   karmaEvents,
   lobbies,
+  lobbyInvites,
   lobbyMembers,
   reports,
   userInterests,
@@ -43,6 +44,9 @@ import {
   type LobbyStatus,
 } from '@masl/shared';
 import type { DbTransaction } from '../karma/karma.service.js';
+import { inviterUser } from '../invites/invite-queries.js';
+import { isTeam } from '../moderation/roles.js';
+import { countCompanions } from '../people/companions.js';
 import { termsAccepted } from '../users/terms.js';
 
 /**
@@ -60,6 +64,11 @@ export type Executor = Database | DbTransaction;
  */
 export const at = (instant: Date): SQL => sql`${instant.toISOString()}::timestamptz`;
 
+/** A LIKE pattern matching values that start with `text`; % and _ in it are literal. */
+export function prefixPattern(text: string): string {
+  return `${text.replace(/[\\%_]/g, '\\$&')}%`;
+}
+
 /** The viewer origin rounded to VIEWER_COORD_DECIMALS (the query schema rounds too). */
 export function roundOrigin(origin: GeoPoint | null | undefined): GeoPoint | null {
   return origin ? { lat: roundViewerCoord(origin.lat), lng: roundViewerCoord(origin.lng) } : null;
@@ -71,6 +80,14 @@ export function originOf(query: { lat?: number; lng?: number }): GeoPoint | null
     ? roundOrigin({ lat: query.lat, lng: query.lng })
     : null;
 }
+
+/** A person's public data (personDto) from `users`. */
+export const personColumns = {
+  code: users.publicCode,
+  firstName: users.firstName,
+  photoUrl: users.photoUrl,
+  karma: users.karma,
+} as const;
 
 /** The lobby's host; aliased so subqueries can use `users` unqualified. */
 export const hostUser = alias(users, 'host');
@@ -135,6 +152,7 @@ const KEEPS_VISIBLE_STATUSES = ['pending', 'approved', 'attended', 'no_show'] as
 function lobbyCardColumns(viewerId: string, origin: GeoPoint | null) {
   return {
     ...publicLobbyColumns,
+    hostCode: hostUser.publicCode,
     hostFirstName: hostUser.firstName,
     hostPhotoUrl: hostUser.photoUrl,
     hostKarma: hostUser.karma,
@@ -380,11 +398,11 @@ export function joinedLobbiesQuery(
     .limit(limit);
 }
 
-/** Profile numbers: hosted lobbies that are not cancelled, memberships taking a slot. */
+/** Profile numbers: hosted lobbies that are not cancelled, memberships taking a slot, companions. */
 export async function loadMyCounts(
   db: Executor,
   viewerId: string,
-): Promise<{ hosted: number; joined: number }> {
+): Promise<{ hosted: number; joined: number; companions: number }> {
   const [hosted] = await db
     .select({ n: count() })
     .from(lobbies)
@@ -398,7 +416,7 @@ export async function loadMyCounts(
         inArray(lobbyMembers.status, [...OCCUPYING_MEMBERSHIP_STATUSES]),
       ),
     );
-  return { hosted: hosted?.n ?? 0, joined: joined?.n ?? 0 };
+  return { hosted: hosted?.n ?? 0, joined: joined?.n ?? 0, companions: await countCompanions(db, viewerId) };
 }
 
 /**
@@ -443,7 +461,7 @@ export async function loadExactPlace(
 /** Members taking a slot, in the order they were admitted (the host is not in the list). */
 export function membersQuery(db: Executor, lobbyId: string) {
   return db
-    .select({ firstName: users.firstName, photoUrl: users.photoUrl, karma: users.karma })
+    .select(personColumns)
     .from(lobbyMembers)
     .innerJoin(users, eq(users.id, lobbyMembers.userId))
     .where(
@@ -484,6 +502,8 @@ export interface ViewerContext {
   pendingApplications: number;
   /** Applies (renewals included) in the last APPLICATIONS_WINDOW_HOURS. */
   applicationsInWindow: number;
+  /** An admin or moderator: no daily or count limits (stage 6). */
+  team: boolean;
 }
 
 /**
@@ -494,9 +514,12 @@ export async function loadViewerContext(
   db: Executor,
   userId: string,
   now: Date,
+  adminIds: readonly number[],
 ): Promise<ViewerContext | null> {
   const [user] = await db
     .select({
+      telegramId: users.telegramId,
+      isModerator: users.isModerator,
       karma: users.karma,
       onboardedAt: users.onboardedAt,
       termsVersion: users.termsVersion,
@@ -544,6 +567,7 @@ export async function loadViewerContext(
     interests: interestRows.map((r) => r.slug as LobbyCategory),
     pendingApplications: pending?.n ?? 0,
     applicationsInWindow: applied?.n ?? 0,
+    team: isTeam(user, adminIds),
   };
 }
 
@@ -649,13 +673,17 @@ export function applicantsQuery(db: Executor, lobbyId: string) {
       status: lobbyMembers.status,
       appliedAt: lobbyMembers.appliedAt,
       decidedAt: lobbyMembers.decidedAt,
-      firstName: users.firstName,
-      photoUrl: users.photoUrl,
-      karma: users.karma,
+      ...personColumns,
       attended: attendedCountSql,
+      // «по приглашению Ани»: a member's invite; the host's own invites need no note.
+      invitedBy: sql<
+        string | null
+      >`case when ${lobbyInvites.byHost} then null else ${inviterUser.firstName} end`,
     })
     .from(lobbyMembers)
     .innerJoin(users, eq(users.id, lobbyMembers.userId))
+    .leftJoin(lobbyInvites, eq(lobbyInvites.id, lobbyMembers.inviteId))
+    .leftJoin(inviterUser, eq(inviterUser.id, lobbyInvites.inviterId))
     .where(and(eq(lobbyMembers.lobbyId, lobbyId), ne(lobbyMembers.status, 'cancelled'), visibleToHostSql))
     .orderBy(asc(lobbyMembers.appliedAt), asc(lobbyMembers.id));
 }

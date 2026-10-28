@@ -71,6 +71,47 @@ export const USER_SEARCH_MAX = 64;
 /** Latest moderation log entries on a user card. */
 export const MODERATION_HISTORY_LIMIT = 50;
 
+/**
+ * Stage 6: links, profiles, invites and feedback (decisions.md). A profile's public code: random
+ * hex, the only handle of a person in links and public responses.
+ */
+export const PUBLIC_CODE_LENGTH = 12;
+/** Telegram's limit on a Mini App start parameter. */
+export const START_PARAM_MAX = 64;
+/** An admin's link tag: Latin letters, digits and hyphens. */
+export const LINK_TAG_SLUG_MAX = 32;
+export const LINK_TAG_TITLE_MAX = 64;
+/** A new user's source is the first link they came by within this many hours of sign-up. */
+export const ARRIVAL_WINDOW_HOURS = 24;
+/** People search on the invite screen: query bounds, results, searches per rolling hour. */
+export const PERSON_SEARCH_MIN = 3;
+export const PERSON_SEARCH_MAX = 64;
+export const PERSON_SEARCH_RESULTS = 20;
+export const PERSON_SEARCHES_PER_HOUR = 30;
+/** Invites one person may send in a rolling day, and at once. */
+export const INVITES_PER_DAY_MAX = 20;
+export const INVITES_WINDOW_HOURS = 24;
+export const INVITES_PER_REQUEST_MAX = 10;
+/** Unanswered invites to one lobby. */
+export const LOBBY_PENDING_INVITES_MAX = 20;
+/** Invite messages the bot sends one person in a rolling day; the rest wait in the app. */
+export const INVITE_MESSAGES_PER_DAY_MAX = 3;
+/** Invites listed on «Мои → Приглашения». */
+export const MY_INVITES_MAX = 50;
+/** Companions listed on «Напарники»; open lobbies on a public profile. */
+export const COMPANIONS_LIST_MAX = 100;
+export const PROFILE_LOBBIES_MAX = 10;
+/** «Написать нам»: text bounds, requests per rolling day, the admin's reply. */
+export const SUPPORT_TEXT_MIN = 10;
+export const SUPPORT_TEXT_MAX = 2000;
+export const SUPPORT_PER_DAY_MAX = 5;
+export const SUPPORT_WINDOW_HOURS = 24;
+export const SUPPORT_REPLY_MAX = 1000;
+/** Requests per admin list. */
+export const SUPPORT_PAGE_SIZE = 50;
+/** Days on the «Уники по дням» chart of the «Всё время» period. */
+export const STATS_ALL_TIME_DAYS = 90;
+
 /** How many interest tags a user picks during onboarding. */
 export const INTERESTS_MIN = 3;
 export const INTERESTS_MAX = 5;
@@ -183,5 +224,8 @@ export const RATE_LIMITS = {
   appealWrite: { limit: 5, windowSeconds: 60 },
   moderationRead: { limit: 120, windowSeconds: 60 },
   moderationWrite: { limit: 60, windowSeconds: 60 },
+  share: { limit: 20, windowSeconds: 60 },
+  inviteWrite: { limit: 10, windowSeconds: 60 },
+  supportWrite: { limit: 5, windowSeconds: 60 },
 } as const;
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

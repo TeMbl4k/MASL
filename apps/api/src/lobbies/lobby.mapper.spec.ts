@@ -30,6 +30,7 @@ const viewer = (patch: Partial<ViewerContext> = {}): ViewerContext => ({
   interests: ['sport'],
   pendingApplications: 0,
   applicationsInWindow: 0,
+  team: false,
   ...patch,
 });
 
@@ -165,6 +166,7 @@ describe('cards and details', () => {
     farFromMetro: false,
     cancelReason: null,
     cancelComment: null,
+    hostCode: 'a1b2c3d4e5f6',
     hostFirstName: 'Анна',
     hostPhotoUrl: null,
     hostKarma: 50,
@@ -211,8 +213,10 @@ describe('applicants', () => {
     status: 'pending',
     appliedAt: NOW,
     decidedAt: null,
+    code: 'b0b0b0b0b0b0',
     firstName: 'Борис',
     photoUrl: null,
+    invitedBy: null,
     karma: 50,
     attended: 0,
     ...patch,
@@ -225,8 +229,9 @@ describe('applicants', () => {
       status: 'pending',
       appliedAt: NOW.toISOString(),
       decidedAt: null,
-      user: { firstName: 'Борис', photoUrl: null, karma: 50, isNewbie: true },
+      user: { code: 'b0b0b0b0b0b0', firstName: 'Борис', photoUrl: null, karma: 50, isNewbie: true },
       meetsMinKarma: true,
+      invitedBy: null,
     });
   });
 
