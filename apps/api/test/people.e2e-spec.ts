@@ -3,6 +3,7 @@ import { linkTags, userArrivals, users } from '@masl/db';
 import {
   ARRIVAL_WINDOW_HOURS,
   HOUR_MS,
+  PUBLIC_CODE_LENGTH,
   apiErrorDto,
   arrivalResponse,
   companionsResponse,
@@ -96,7 +97,7 @@ describe.skipIf(!adminUrl)('profiles, companions and sharing e2e (requires TEST_
 
       expectError(await profile(viewer.token, banned.user.publicCode), 404, 'person_not_found');
       expectError(await profile(viewer.token, fresh.user.publicCode), 404, 'person_not_found');
-      expectError(await profile(viewer.token, '0123456789ab'), 404, 'person_not_found');
+      expectError(await profile(viewer.token, 'f'.repeat(PUBLIC_CODE_LENGTH)), 404, 'person_not_found');
       expect((await profile(viewer.token, 'not-a-code')).statusCode).toBe(400);
       const own = publicProfileDto.parse((await profile(banned.token, banned.user.publicCode)).json());
       expect(own.isSelf).toBe(true);
